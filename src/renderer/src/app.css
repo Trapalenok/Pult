@@ -420,3 +420,17 @@
 .sidebar__section h4 { display: flex; align-items: center; justify-content: space-between; }
 .sidebar__hint { margin: 0 var(--space-3); font: var(--text-footnote); color: var(--label-3); }
 .ws-open { color: var(--green); margin-right: var(--space-2); font-size: 8px; vertical-align: middle; }
+
+/* ── Updates ──────────────────────────────────────────────── */
+.update-banner { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.update-notes { padding: var(--space-3) var(--space-5) var(--space-4); border-top: 1px solid var(--separator); max-height: 320px; overflow: auto; user-select: text; }
+.update-notes section + section { margin-top: var(--space-4); }
+.update-notes h5 { display: flex; align-items: baseline; gap: var(--space-3); margin: 0 0 var(--space-2); font: var(--text-headline); color: var(--label-1); }
+.update-notes h5 span { font: var(--text-footnote); color: var(--label-2); }
+.update-notes strong { display: block; margin: var(--space-2) 0 var(--space-1); font: var(--text-subhead); font-weight: 600; color: var(--label-1); }
+.update-notes p, .update-notes li { margin: 0; font: var(--text-subhead); color: var(--label-1); }
+.update-notes ul { margin: 0; padding-left: var(--space-5); }
+.update-notes li + li { margin-top: var(--space-1); }
+.update-notes code { font-family: var(--font-mono); font-size: 0.92em; padding: 0 3px; border-radius: 4px; background: var(--fill-4); }
+.update-notes__empty { color: var(--label-2) !important; }
+.update-progress { width: 140px; height: 6px; accent-color: var(--tint); }

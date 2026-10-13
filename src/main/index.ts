@@ -15,6 +15,7 @@ import { openInBrowser } from './integrations/browser'
 import { launchWinbox } from './integrations/winbox'
 import { Monitor } from './monitor/monitor'
 import { dnsQuery, Tools } from './tools/tools'
+import { Updater } from './update/updater'
 import type { ToolEvent, ToolKind, ToolParams } from '@shared/tools'
 
 // The app was called "SSH Client" before Pult. Keep its data folder (%APPDATA%\ssh-client: hosts, passwords,
@@ -32,6 +33,8 @@ const sessions = new SessionManager({
   data: (id, data, end) => sendAll('ssh:data', id, data, end),
   closed: (id, reason) => sendAll('ssh:closed', id, reason)
 })
+
+const updater = new Updater((state) => sendAll('update:state', state))
 
 const jump = new JumpHost()
 /** A pack of hosts (map sheet, folder) opens a few at a time: see open-queue.ts. */
@@ -251,6 +254,12 @@ function registerIpc(): void {
   ipcMain.on('tools:stop', (_e, runId: string) => tools.stop(runId))
   ipcMain.handle('tools:dns', (_e, q) => dnsQuery(q))
 
+  ipcMain.handle('update:state', () => updater.get())
+  ipcMain.handle('update:check', () => updater.check())
+  ipcMain.handle('update:download', (_e, version: string) => updater.download(version))
+  ipcMain.on('update:cancel', () => updater.cancel())
+  ipcMain.handle('update:install', () => updater.install())
+
   ipcMain.handle('host:winbox', async (e, hostId: string) => {
     const store = loadStore()
     const host = hostById(hostId)
@@ -269,6 +278,8 @@ app.whenReady().then(() => {
   registerIpc()
   createMainWindow()
   monitor.start()
+  // A few seconds after start, so the first window and the monitor go first. Off in Settings.
+  if (loadStore().settings?.updateCheck !== false) setTimeout(() => void updater.check(true), 5000)
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createMainWindow())
 })
 

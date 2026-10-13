@@ -18,6 +18,7 @@ import { HostKeySheet } from './sheets/HostKeySheet'
 import { HostSheet, type SecretEdits } from './sheets/HostSheet'
 import type { PaneSession } from './terminal/TerminalPane'
 import { WorkspaceSheet } from './sheets/WorkspaceSheet'
+import { UpdateBanner, useUpdate } from './update/UpdatePanel'
 import { noticeToTerminal, writeToTerminal } from './terminal/TerminalView'
 import { describeOwn, errorText, healthSummary, hostsInSubtree, hostTint, inheritFromFolders, kindMeta, moveInto, newId, ownSummary, subtreeIds } from './util'
 
@@ -41,6 +42,7 @@ export function App() {
   const [error, setError] = useState<{ title: string; text: string } | null>(null)
   const [status, setStatus] = useState<Map<string, HostStatus>>(new Map())
   const [keyPrompts, setKeyPrompts] = useState<HostKeyPrompt[]>([])
+  const update = useUpdate()
 
   const [sessions, setSessions] = useState<PaneSession[]>([])
   const [detached, setDetached] = useState<Set<string>>(new Set())
@@ -503,6 +505,7 @@ export function App() {
             <Banner title={error.title} onClose={() => setError(null)}>{error.text}</Banner>
           </div>
         )}
+        {!error && screen !== 'settings' && <UpdateBanner state={update} onOpen={() => setScreen('settings')} />}
 
         {screen === 'hosts' && (
           <HostsScreen
@@ -588,7 +591,7 @@ export function App() {
         )}
 
         {screen === 'credentials' && <CredentialsScreen store={store} onEdit={(credential) => setEditing({ kind: 'credential', credential })} />}
-        {screen === 'settings' && <SettingsScreen settings={store.settings ?? {}} credentials={store.credentials} folders={store.folders} onChange={saveSettings} onOpenCredentials={() => setScreen('credentials')} onImported={(s) => (setStore(s), applyTheme(s.settings))} />}
+        {screen === 'settings' && <SettingsScreen settings={store.settings ?? {}} credentials={store.credentials} folders={store.folders} update={update} onChange={saveSettings} onOpenCredentials={() => setScreen('credentials')} onImported={(s) => (setStore(s), applyTheme(s.settings))} />}
       </main>
 
       {editing?.kind === 'host' && (
