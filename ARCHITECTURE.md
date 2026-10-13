@@ -264,3 +264,4 @@ algorithms: {
 - Проверка при запуске через 5 секунд, выключается в Настройках (`settings.updateCheck`); без сети она молчит. Баннер «Доступна версия» закрывается до следующей версии (localStorage `update.dismissed`).
 - IPC: `update:state`, `update:check`, `update:download(version)`, `update:cancel`, `update:install`; состояние рассылается во все окна событием `update:state`. Renderer: `renderer/src/update/UpdatePanel.tsx`.
 - Тест: `npm run test:update` (поддельный GitHub: выбор файла, порядок версий, контрольная сумма, portable, офлайн; `LIVE=1` дополнительно спрашивает настоящий).
+- Релиз собирается черновиком (`draft: true` в release.yml). Анонимный API черновики не отдаёт, поэтому Pult видит версию только после того, как владелец проверит её и нажмёт «Publish release».

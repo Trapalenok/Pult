@@ -1,7 +1,9 @@
-# Сборка установщика Windows и публикация релиза.
-# Запуск: тег vX.Y.Z (git tag v0.3.2 && git push origin v0.3.2)
-# или вручную: Actions → Release → Run workflow. Версия берётся из package.json,
-# тег создаётся сам, если его ещё нет.
+# Сборка установщика Windows в ЧЕРНОВИК релиза.
+# Запуск: Actions → Release → Run workflow (можно на любой ветке, например из PR)
+# или тег vX.Y.Z. Версия берётся из package.json.
+# Черновик видите только вы: скачайте exe, проверьте, прочитайте заметки, затем
+# на странице релиза нажмите «Publish release» с галочкой «Set as the latest release».
+# Pult у пользователей видит только опубликованные релизы, черновики — нет.
 name: Release
 
 on:
@@ -33,10 +35,12 @@ jobs:
       - name: Build installer
         run: npx electron-vite build && npx electron-builder --win --x64 --publish never
 
-      - name: Publish release
+      - name: Draft release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          draft: true
           name: Pult ${{ steps.v.outputs.tag }}
           files: |
             dist/*.exe

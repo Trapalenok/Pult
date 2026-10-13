@@ -30,7 +30,7 @@ Pult (раньше SSH Client) — десктопный клиент на диз
 
 Собрать установщик самому: `npm install`, затем `npm run dist:win`, результат в папке `dist`.
 
-Новый релиз собирается на GitHub сам: добавьте заметки в `.github/release-notes/vX.Y.Z.md`, поднимите версию в `package.json` и отправьте тег `git tag vX.Y.Z && git push origin vX.Y.Z` (или запустите Actions → Release → Run workflow). Через несколько минут оба .exe появятся в Releases.
+Новый релиз собирается на GitHub черновиком: добавьте заметки в `.github/release-notes/vX.Y.Z.md`, поднимите версию в `package.json` и запустите Actions → Release → Run workflow (на ветке с изменениями). Через несколько минут в Releases появится черновик с обоими .exe, его видит только владелец репозитория. Проверьте установщик и заметки, затем нажмите «Publish release» с отметкой «Set as the latest release»: только после этого Pult у пользователей предложит обновиться.
 
 ## Запуск из исходников на Windows
 
