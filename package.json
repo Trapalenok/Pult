@@ -1,0 +1,95 @@
+{
+  "name": "ssh-client",
+  "version": "0.3.2",
+  "description": "Pult: local network console with SSH, web UI, WinBox, network tools and an encrypted local base",
+  "main": "./out/main/index.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:linux": "electron-vite build && electron-builder --linux",
+    "test:legacy": "node scripts/electron-node.cjs test/legacy-algorithms.mjs",
+    "test:dsa": "node scripts/electron-node.cjs --experimental-strip-types test/dsa-verify.mjs",
+    "test:foreign": "node --experimental-strip-types test/foreign-import.mjs",
+    "test:tools": "node --experimental-strip-types test/net-tools.mjs",
+    "test:socks5": "node --experimental-strip-types test/socks5.mjs",
+    "test:inherit": "esbuild test/inherit.mjs --bundle --platform=node --format=esm --alias:@shared=./src/shared --log-level=warning --outfile=out/test/inherit.mjs && node out/test/inherit.mjs",
+    "test:burst": "esbuild test/burst-open.mjs --bundle --platform=node --format=esm --external:ssh2 --log-level=warning --outfile=out/test/burst-open.mjs && node out/test/burst-open.mjs"
+  },
+  "dependencies": {
+    "net-snmp": "^3.29.2",
+    "sql.js": "^1.14.2",
+    "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/sql.js": "^1.4.11",
+    "@types/ssh2": "^1.15.6",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "@xyflow/react": "^12.12.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7"
+  },
+  "build": {
+    "appId": "local.sshclient",
+    "productName": "Pult",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "!**/node_modules/**/build/Release/**",
+      "!**/node_modules/**/*.node"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Pult-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "Pult-${version}-portable.exe"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "publish": null
+  }
+}

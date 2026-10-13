@@ -1,0 +1,70 @@
+# ── Зависимости и сборка ─────────────────────────────
+node_modules/
+out/
+dist/
+release/
+*.tsbuildinfo
+
+# ── Установщики (части по 23 МБ, exe, сборщик) ──────
+installer/
+*.exe
+*.msi
+*.blockmap
+*.part[0-9]*
+join-setup*.cmd
+
+# ── База и секреты Pult ──────────────────────────────
+# Рабочая база живёт в %APPDATA%\ssh-client\store.json, вне проекта.
+# Эти правила страхуют, если копию базы положили в папку проекта.
+store.json
+store.json.tmp
+ssh-client/
+Pult/
+
+# Экспорт конфигурации (Настройки → Перенос конфигурации): pult-ГГГГ-ММ-ДД.json
+pult-*.json
+*.pult.json
+export/
+exports/
+backup/
+backups/
+
+# Базы других программ для «Импорт из другой базы»
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.csv
+*.xlsx
+*.xls
+
+# ── Ключи и сертификаты ──────────────────────────────
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+*.pem
+*.key
+*.ppk
+*.p12
+*.pfx
+known_hosts
+.ssh/
+
+# ── Переменные окружения и локальные заметки ────────
+.env
+.env.*
+*.local
+secrets/
+private/
+
+# ── Логи и мусор ОС/редактора ───────────────────────
+*.log
+npm-debug.log*
+*.dmp
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.swp
