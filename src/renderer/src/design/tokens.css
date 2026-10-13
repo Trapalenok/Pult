@@ -1,0 +1,256 @@
+/*
+ * Design tokens: Shellwise, "a soft design system for an SSH client" (Figma NvfWo8jzR3tfLXBhnAHiGV).
+ * Two layers:
+ *   1. --sw-*  raw Shellwise tokens, one set per theme (Oat, Mist, Cocoa, Midnight, Moss, Dusk).
+ *      This file carries Cocoa (dark) and Oat (light) as the first-paint fallback; themes.ts
+ *      overrides the whole --sw-* set inline from shellwise.tokens.json.
+ *   2. Semantic aliases (--bg-*, --label-*, --tint, --green...) that components use. They only
+ *      point at --sw-* tokens, so a theme never has to know about components.
+ * Components never hardcode values.
+ */
+@import '@fontsource/manrope/400.css';
+@import '@fontsource/manrope/500.css';
+@import '@fontsource/manrope/600.css';
+@import '@fontsource/manrope/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+:root {
+  /* ── Typography (Shellwise text styles) ─────────────────── */
+  --font-ui: 'Manrope', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, 'DejaVu Sans Mono', monospace;
+
+  --text-large-title: 700 28px/34px var(--font-display);   /* Text/Display, -0.4px */
+  --text-title: 700 20px/26px var(--font-display);         /* Text/Title, -0.2px */
+  --text-headline: 600 16px/22px var(--font-ui);           /* Text/Heading, -0.1px */
+  --text-body: 500 14px/20px var(--font-ui);               /* Text/Body */
+  --text-body-strong: 600 14px/20px var(--font-ui);        /* Text/Body Strong */
+  --text-callout: 600 13px/18px var(--font-ui);            /* Text/Label */
+  --text-subhead: 500 13px/18px var(--font-ui);
+  --text-footnote: 500 12px/16px var(--font-ui);           /* Text/Caption */
+  --text-caption: 700 11px/14px var(--font-ui);            /* Text/Overline */
+  --text-mono: 400 13px/20px var(--font-mono);             /* Text/Mono */
+  --text-mono-sm: 500 12px/16px var(--font-mono);          /* Text/Mono Small */
+  --tracking-display: -0.4px;
+  --tracking-title: -0.2px;
+  --tracking-caption: 0.8px;
+
+  /* ── Spacing (Shellwise space/*) ────────────────────────── */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+  --space-7: 24px;
+  --space-8: 32px;
+  --space-9: 40px;
+  --space-half: 6px;   /* space/6 */
+  --space-10px: 10px;  /* space/10 */
+
+  /* ── Radii (Shellwise radius/*) ─────────────────────────── */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-pill: 999px;
+
+  /* ── Sizes ──────────────────────────────────────────────── */
+  --control-sm: 28px;
+  --control-md: 34px;
+  --control-lg: 42px;
+  --titlebar-h: 48px;
+  --sidebar-w: 244px;
+  --icon-tile: 40px;
+  --term-font-size: 13;
+
+  /* ── Motion ─────────────────────────────────────────────── */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-sheet: 320ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── Raw Shellwise tokens: Cocoa (dark default) ─────────── */
+  color-scheme: dark;
+  --sw-bg-app: #1e1a17;
+  --sw-bg-sidebar: #191512;
+  --sw-bg-surface: #262120;
+  --sw-bg-raised: #2f2926;
+  --sw-bg-hover: #3a322d;
+  --sw-bg-selected: #46392f;
+  --sw-bg-input: #2a2421;
+  --sw-bg-terminal: #161311;
+  --sw-border-subtle: #322b27;
+  --sw-border-default: #443a33;
+  --sw-border-focus: #e09a6b;
+  --sw-text-primary: #f1e7dc;
+  --sw-text-secondary: #c4b6a8;
+  --sw-text-muted: #9c8e81;
+  --sw-text-on-accent: #1e1a17;
+  --sw-text-terminal: #eadfd2;
+  --sw-accent-default: #e09a6b;
+  --sw-accent-hover: #eaaa7e;
+  --sw-accent-soft: #3e2d22;
+  --sw-accent-text: #f0b48a;
+  --sw-status-online: #7cc08e;
+  --sw-status-online-soft: #233328;
+  --sw-status-warning: #e2b65c;
+  --sw-status-warning-soft: #3a3020;
+  --sw-status-offline: #e47f72;
+  --sw-status-offline-soft: #3d2522;
+  --sw-status-info: #7fa8d6;
+  --sw-status-info-soft: #222c38;
+  --sw-tag-violet: #b79be0;
+  --sw-tag-violet-soft: #2f2840;
+  --sw-tag-peach: #eba07c;
+  --sw-tag-peach-soft: #3d2a20;
+  --sw-map-link: #54483f;
+  --sw-map-grid: #2a2421;
+  --sw-term-prompt: #e09a6b;
+  --sw-term-green: #a9d18e;
+  --sw-term-blue: #8fb8e0;
+  --sw-term-yellow: #ebc97e;
+  --sw-term-red: #ee968a;
+  --sw-term-muted: #8a7c70;
+  /* Tag hues the Figma file does not define; tuned to sit beside tag/violet and tag/peach. */
+  --sw-tag-teal: #7cc4bd;
+  --sw-tag-indigo: #9aa3f0;
+  --sw-tag-pink: #e88fb5;
+  /* Soft/* effect styles; dark themes need a deeper shadow to read at all. */
+  --sw-shadow-rgb: 0 0 0;
+  --sw-shadow-a1: 0.18;
+  --sw-shadow-a2: 0.28;
+
+  /* ── Semantic aliases used by components ────────────────── */
+  --tint: var(--sw-accent-default);
+  --tint-hover: var(--sw-accent-hover);
+  --tint-soft: var(--sw-accent-soft);
+  --tint-text: var(--sw-accent-text);
+  --on-tint: var(--sw-text-on-accent);
+
+  /* Tint palette (host/folder colours, status). Names stay as in the data model. */
+  --blue: var(--sw-status-info);
+  --green: var(--sw-status-online);
+  --orange: var(--sw-tag-peach);
+  --red: var(--sw-status-offline);
+  --yellow: var(--sw-status-warning);
+  --purple: var(--sw-tag-violet);
+  --teal: var(--sw-tag-teal);
+  --indigo: var(--sw-tag-indigo);
+  --pink: var(--sw-tag-pink);
+  --gray: var(--sw-text-muted);
+  --warning: var(--sw-status-warning);
+
+  --bg-app: var(--sw-bg-app);
+  --bg-chrome: var(--sw-bg-app);         /* titlebar, tab strip; sent to main for the caption buttons */
+  --bg-sidebar: var(--sw-bg-sidebar);
+  --bg-content: var(--sw-bg-app);
+  --bg-surface: var(--sw-bg-surface);
+  --bg-elevated: var(--sw-bg-raised);    /* cards, grouped rows */
+  --bg-elevated-2: var(--sw-bg-hover);   /* hover, nested */
+  --bg-selected: var(--sw-bg-selected);
+  --bg-input: var(--sw-bg-input);
+  --bg-sheet: var(--sw-bg-surface);
+  --bg-seg-selected: var(--sw-bg-raised);
+  --bg-terminal: var(--sw-bg-terminal);
+  --bg-scrim: rgb(var(--sw-shadow-rgb) / 0.45);
+
+  --fill-1: var(--sw-border-default);    /* toggle off, strong fills */
+  --fill-2: var(--sw-border-default);    /* scrollbar, map grid dots */
+  --fill-3: var(--sw-bg-hover);          /* selected nav, segmented track */
+  --fill-4: color-mix(in srgb, var(--sw-bg-hover) 70%, transparent); /* hover */
+
+  --label-1: var(--sw-text-primary);
+  --label-2: var(--sw-text-secondary);
+  --label-3: var(--sw-text-muted);
+  --label-4: var(--sw-border-default);
+
+  --separator: var(--sw-border-subtle);
+  --separator-opaque: var(--sw-border-default);
+  --border-focus: var(--sw-border-focus);
+
+  --shadow-card: 0 1px 2px rgb(var(--sw-shadow-rgb) / var(--sw-shadow-a1)), 0 2px 6px rgb(var(--sw-shadow-rgb) / var(--sw-shadow-a1)); /* Soft/sm */
+  --shadow-raised: 0 2px 4px rgb(var(--sw-shadow-rgb) / var(--sw-shadow-a1)), 0 8px 20px rgb(var(--sw-shadow-rgb) / var(--sw-shadow-a2)); /* Soft/md */
+  --shadow-sheet: 0 4px 8px rgb(var(--sw-shadow-rgb) / var(--sw-shadow-a1)), 0 18px 40px rgb(var(--sw-shadow-rgb) / var(--sw-shadow-a2)); /* Soft/lg */
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--sw-border-focus) 40%, transparent);
+
+  /* Map */
+  --map-link: var(--sw-map-link);
+  --map-grid: var(--sw-map-grid);
+
+  /* Terminal ANSI palette (xterm reads these; keep them plain colours, no color-mix). */
+  --term-fg: var(--sw-text-terminal);
+  --term-cursor: var(--sw-term-prompt);
+  --term-selection: color-mix(in srgb, var(--sw-term-prompt) 30%, transparent);
+  --term-black: var(--sw-bg-terminal);
+  --term-red: var(--sw-term-red);
+  --term-green: var(--sw-term-green);
+  --term-yellow: var(--sw-term-yellow);
+  --term-blue: var(--sw-term-blue);
+  --term-magenta: var(--sw-tag-violet);
+  --term-cyan: var(--sw-tag-teal);
+  --term-white: var(--sw-text-terminal);
+  --term-bright-black: var(--sw-term-muted);
+
+  --toggle-knob: var(--sw-text-primary);
+}
+
+/* Light scheme base: Oat. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+    --sw-bg-app: #f4efe7;
+    --sw-bg-sidebar: #ece5d9;
+    --sw-bg-surface: #fbf8f3;
+    --sw-bg-raised: #ffffff;
+    --sw-bg-hover: #e9e1d4;
+    --sw-bg-selected: #e4d6c3;
+    --sw-bg-input: #f1ebe1;
+    --sw-bg-terminal: #2b2622;
+    --sw-border-subtle: #e6ddcf;
+    --sw-border-default: #d3c7b4;
+    --sw-border-focus: #c27a4e;
+    --sw-text-primary: #2e2823;
+    --sw-text-secondary: #5f564c;
+    --sw-text-muted: #7e7367;
+    --sw-text-on-accent: #ffffff;
+    --sw-text-terminal: #ede4d6;
+    --sw-accent-default: #a85e33;
+    --sw-accent-hover: #94512b;
+    --sw-accent-soft: #f3e1d3;
+    --sw-accent-text: #8f4d27;
+    --sw-status-online: #3f8a5c;
+    --sw-status-online-soft: #dceddf;
+    --sw-status-warning: #9c6e14;
+    --sw-status-warning-soft: #f6e8c9;
+    --sw-status-offline: #b44a40;
+    --sw-status-offline-soft: #f5dad5;
+    --sw-status-info: #3f6c9c;
+    --sw-status-info-soft: #dce7f2;
+    --sw-tag-violet: #76569f;
+    --sw-tag-violet-soft: #e8def3;
+    --sw-tag-peach: #a8573a;
+    --sw-tag-peach-soft: #f7e2d5;
+    --sw-map-link: #c9bca6;
+    --sw-map-grid: #e9e1d3;
+    --sw-term-prompt: #e8a77c;
+    --sw-term-green: #a8c98a;
+    --sw-term-blue: #8fb3d9;
+    --sw-term-yellow: #e6c27a;
+    --sw-term-red: #e39187;
+    --sw-term-muted: #9c8f80;
+    --sw-tag-teal: #2f7f7a;
+    --sw-tag-indigo: #5a5fb8;
+    --sw-tag-pink: #a8496f;
+    --sw-shadow-rgb: 51 38 26;
+    --sw-shadow-a1: 0.045;
+    --sw-shadow-a2: 0.08;
+    --term-magenta: #c3a3f0;
+    --term-cyan: #8fcfc8;
+    --toggle-knob: #ffffff;
+  }
+}

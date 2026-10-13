@@ -1,0 +1,192 @@
+/* Components, Shellwise style: soft surfaces, 1px subtle borders, Soft/* shadows. Only tokens from tokens.css. */
+
+/* ── Base ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--label-1);
+  font: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+  user-select: none;
+  overflow: hidden;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: default; }
+:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--sw-border-default); border-radius: var(--radius-pill); border: 3px solid transparent; background-clip: content-box; }
+
+/* Tints: any component with .tint-* gets --c set to that system colour. */
+.tint-blue { --c: var(--blue); } .tint-green { --c: var(--green); } .tint-orange { --c: var(--orange); }
+.tint-red { --c: var(--red); } .tint-purple { --c: var(--purple); } .tint-teal { --c: var(--teal); }
+.tint-indigo { --c: var(--indigo); } .tint-pink { --c: var(--pink); } .tint-gray { --c: var(--gray); }
+
+/* ── Button ───────────────────────────────────────────────── */
+.ds-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  border: 0; border-radius: var(--radius-md); padding: 0 var(--space-5);
+  font: var(--text-callout); white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out), opacity var(--dur-fast), transform var(--dur-fast);
+}
+.ds-btn:active:not(:disabled) { transform: scale(0.97); }
+.ds-btn:disabled { opacity: 0.4; }
+.ds-btn--sm { height: var(--control-sm); padding: 0 var(--space-4); border-radius: var(--radius-sm); }
+.ds-btn--md { height: var(--control-md); }
+.ds-btn--lg { height: var(--control-lg); padding: 0 var(--space-6); border-radius: var(--radius-lg); font: var(--text-body-strong); }
+.ds-btn--icon { padding: 0; aspect-ratio: 1; }
+.ds-btn--filled { background: var(--tint); color: var(--on-tint); box-shadow: var(--shadow-card); }
+.ds-btn--filled:hover:not(:disabled) { background: var(--tint-hover); }
+.ds-btn--tinted { background: var(--tint-soft); color: var(--tint-text); }
+.ds-btn--tinted:hover:not(:disabled) { background: color-mix(in srgb, var(--tint) 22%, var(--tint-soft)); }
+.ds-btn--plain { background: transparent; color: var(--tint-text); }
+.ds-btn--plain:hover:not(:disabled) { background: var(--fill-4); }
+.ds-btn--plain.is-strong { font-weight: 600; }
+.ds-btn--plain.is-destructive { color: var(--red); }
+.ds-btn--destructive { background: var(--sw-status-offline-soft); color: var(--red); }
+.ds-btn--destructive:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 18%, var(--sw-status-offline-soft)); }
+
+.ds-iconbtn {
+  display: inline-grid; place-items: center; width: var(--control-sm); height: var(--control-sm);
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--label-2);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.ds-iconbtn:hover { background: var(--bg-elevated-2); color: var(--label-1); }
+.ds-iconbtn.is-active { background: var(--tint-soft); color: var(--tint-text); }
+
+/* ── Badge, Tile, Dot ─────────────────────────────────────── */
+.ds-badge {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 var(--space-3);
+  border-radius: var(--radius-pill); font: var(--text-caption); letter-spacing: var(--tracking-caption);
+  text-transform: uppercase; color: var(--c); background: color-mix(in srgb, var(--c) 15%, var(--bg-elevated));
+}
+.ds-tile {
+  /* Soft tile: tinted wash with the colour as the glyph, like accent/soft + accent/text. */
+  display: inline-grid; place-items: center; flex: none; color: var(--c);
+  background: color-mix(in srgb, var(--c) 16%, var(--bg-elevated));
+  font: 700 14px/1 var(--font-ui);
+}
+.ds-tile--sm { width: 28px; height: 28px; border-radius: var(--radius-sm); font-size: 11px; }
+.ds-tile--md { width: var(--icon-tile); height: var(--icon-tile); border-radius: var(--radius-md); }
+.ds-tile--lg { width: 56px; height: 56px; border-radius: var(--radius-lg); font-size: 20px; }
+.ds-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ds-dot--online { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); }
+.ds-dot--connecting { background: var(--orange); animation: ds-pulse 1s infinite alternate; }
+.ds-dot--offline { background: var(--label-3); }
+@keyframes ds-pulse { to { opacity: 0.3; } }
+
+/* ── Grouped list ─────────────────────────────────────────── */
+.ds-group { margin-bottom: var(--space-6); }
+.ds-group__header { margin: 0 0 var(--space-3) var(--space-4); font: var(--text-caption); text-transform: uppercase; letter-spacing: var(--tracking-caption); color: var(--label-3); }
+.ds-group__footer { margin: var(--space-2) var(--space-4) 0; font: var(--text-footnote); color: var(--label-2); }
+.ds-group__body { background: var(--bg-elevated); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card), 0 0 0 1px var(--separator); }
+.ds-row {
+  position: relative; display: flex; align-items: center; gap: var(--space-4);
+  min-height: 48px; padding: var(--space-2) var(--space-5);
+}
+.ds-row + .ds-row::before {
+  content: ''; position: absolute; top: 0; right: 0; left: var(--space-5);
+  border-top: 1px solid var(--separator);
+}
+.ds-row:has(.ds-tile) + .ds-row::before { left: calc(var(--space-5) + 28px + var(--space-4)); }
+.ds-row.is-pressable:hover { background: var(--fill-4); }
+.ds-row__label { flex: none; }
+.ds-row__control { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); min-width: 0; color: var(--label-2); }
+.ds-row__chevron { color: var(--label-3); }
+.ds-field {
+  flex: 1; min-width: 0; border: 0; background: transparent; text-align: right; outline: none;
+  color: var(--label-1); user-select: text;
+}
+.ds-field::placeholder { color: var(--label-3); }
+.ds-field:focus { box-shadow: none; color: var(--tint-text); }
+.ds-select { position: relative; display: inline-flex; align-items: center; gap: var(--space-2); color: var(--label-2); }
+.ds-select select { appearance: none; border: 0; background: transparent; text-align: right; padding-right: var(--space-1); outline: none; }
+.ds-select select option { background: var(--bg-elevated); color: var(--label-1); }
+
+/* ── Toggle ───────────────────────────────────────────────── */
+.ds-toggle {
+  position: relative; flex: none; width: 46px; height: 28px; padding: 0; border: 0;
+  border-radius: var(--radius-pill); background: var(--fill-1); transition: background var(--dur-base) var(--ease-out);
+}
+.ds-toggle.is-on { background: var(--tint); }
+.ds-toggle__knob {
+  position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%; background: var(--toggle-knob);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.ds-toggle.is-on .ds-toggle__knob { transform: translateX(18px); }
+
+/* ── Segmented ────────────────────────────────────────────── */
+.ds-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--radius-md); background: var(--bg-input); box-shadow: inset 0 0 0 1px var(--separator); }
+.ds-seg__item {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  border: 0; border-radius: calc(var(--radius-md) - 3px); background: transparent; font: var(--text-callout);
+  color: var(--label-2); padding: 0 var(--space-4); transition: background var(--dur-base) var(--ease-out);
+}
+.ds-seg--md .ds-seg__item { height: 28px; }
+.ds-seg--sm .ds-seg__item { height: 22px; padding: 0 var(--space-3); }
+.ds-seg__item:hover:not(.is-selected) { color: var(--label-1); }
+.ds-seg__item.is-selected { background: var(--bg-seg-selected); color: var(--label-1); box-shadow: var(--shadow-card); }
+
+/* ── Search ───────────────────────────────────────────────── */
+.ds-search {
+  display: flex; align-items: center; gap: var(--space-2); height: var(--control-md); padding: 0 var(--space-3);
+  border-radius: var(--radius-md); background: var(--bg-input); color: var(--label-3); min-width: 180px;
+  box-shadow: inset 0 0 0 1px var(--separator); transition: box-shadow var(--dur-fast);
+}
+.ds-search:focus-within { box-shadow: inset 0 0 0 1px var(--border-focus), var(--focus-ring); }
+.ds-search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; color: var(--label-1); user-select: text; }
+.ds-search input::placeholder { color: var(--label-3); }
+.ds-search button { display: grid; place-items: center; width: 16px; height: 16px; border: 0; border-radius: 50%; background: var(--label-3); color: var(--bg-app); }
+
+/* ── Sheet ────────────────────────────────────────────────── */
+.ds-scrim { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--bg-scrim); animation: ds-fade var(--dur-base) var(--ease-out); }
+.ds-sheet {
+  display: flex; flex-direction: column; width: min(560px, calc(100vw - 48px)); max-height: calc(100vh - 80px);
+  border-radius: var(--radius-xl); background: var(--bg-sheet); box-shadow: var(--shadow-sheet), 0 0 0 1px var(--separator);
+  animation: ds-sheet-in var(--dur-sheet) var(--ease-sheet);
+}
+.ds-sheet__bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: var(--space-4) var(--space-4); border-bottom: 1px solid var(--separator); }
+.ds-sheet__bar h3 { margin: 0; font: var(--text-headline); }
+.ds-sheet__bar > :first-child { justify-self: start; }
+.ds-sheet__bar > :last-child { justify-self: end; }
+.ds-sheet__body { overflow: auto; padding: var(--space-6) var(--space-5) var(--space-3); }
+@keyframes ds-fade { from { opacity: 0; } }
+@keyframes ds-sheet-in { from { transform: translateY(24px) scale(0.98); opacity: 0; } }
+
+/* ── Menu ─────────────────────────────────────────────────── */
+.ds-menu { position: relative; }
+.ds-menu__list {
+  position: absolute; right: 0; top: calc(100% + var(--space-2)); z-index: 50; min-width: 220px; padding: var(--space-2) 0;
+  border-radius: var(--radius-md); background: var(--bg-elevated); padding: var(--space-2);
+  box-shadow: var(--shadow-raised), 0 0 0 1px var(--separator); animation: ds-fade var(--dur-fast);
+}
+.ds-menu__item {
+  display: flex; align-items: center; justify-content: space-between; width: 100%; gap: var(--space-4);
+  height: 34px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; color: var(--label-1);
+}
+.ds-menu__item:hover { background: var(--bg-elevated-2); }
+.ds-menu__item.is-destructive { color: var(--red); }
+.ds-menu__item.is-destructive:hover { background: var(--sw-status-offline-soft); }
+
+/* ── Empty state, Banner ──────────────────────────────────── */
+.ds-empty { display: grid; justify-items: center; align-content: center; gap: var(--space-3); height: 100%; padding: var(--space-8); color: var(--label-3); text-align: center; }
+.ds-empty h3 { margin: var(--space-2) 0 0; font: var(--text-title); color: var(--label-1); }
+.ds-empty p { margin: 0 0 var(--space-3); max-width: 360px; font: var(--text-subhead); color: var(--label-2); }
+.ds-banner {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4);
+  padding: var(--space-4) var(--space-5); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--c) 13%, var(--bg-elevated)); border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
+}
+.ds-banner strong { font: var(--text-headline); color: var(--c); }
+.ds-banner__text { margin-top: var(--space-1); font: var(--text-subhead); color: var(--label-1); white-space: pre-wrap; user-select: text; }
+
+/* ── Health ───────────────────────────────────────────────── */
+.ds-health { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.ds-health--up { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 20%, transparent); }
+.ds-health--down { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 25%, transparent); animation: ds-pulse 0.9s infinite alternate; }
+.ds-health--unknown { background: var(--label-3); }
+.ds-spark rect { fill: color-mix(in srgb, var(--green) 70%, transparent); }
+.ds-spark rect.is-lost { fill: var(--red); }
