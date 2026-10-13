@@ -252,3 +252,15 @@ algorithms: {
 - IPC: `tools:start(runId, kind, params)` → поток `tools:event`, `tools:stop(runId)`, `tools:dns`. Запуски привязаны к окну и останавливаются при его закрытии. Адрес проверяется (только имя/адрес, без опций), shell не используется.
 - Экран монтируется при первом открытии и остаётся смонтированным, поэтому ping продолжает идти на других экранах.
 - Тест разбора: `npm run test:tools`.
+
+## 20. Обновления из GitHub Releases
+
+Источник один: релизы публичного репозитория `Trapalenok/Pult`, которые собирает workflow Release. Токенов в приложении нет, анонимного лимита GitHub API (60 запросов в час на IP) хватает на проверку при запуске и по кнопке.
+
+- Main: `main/update/updater.ts`. Проверка — `GET api.github.com/repos/Trapalenok/Pult/releases` через `net.fetch` (системный прокси Windows работает), черновики и pre-release отбрасываются. Для установленной версии берётся `Pult-Setup-X.Y.Z.exe`, для portable (`PORTABLE_EXECUTABLE_FILE`) — `Pult-X.Y.Z-portable.exe`. Ссылка обязана начинаться с `https://github.com/Trapalenok/Pult/releases/download/`.
+- Скачивание в `%TEMP%\pult-update`, с прогрессом и отменой. Проверяются размер и SHA-256 из поля `digest`, которое GitHub отдаёт для файлов релиза; при несовпадении файл удаляется.
+- Установка: setup запускается как `Pult-Setup.exe /S --updated --force-run` (тихая установка поверх, в ту же папку, затем Pult стартует снова), после чего Pult закрывается. Если Pult стоит в Program Files (для всех пользователей), установщик открывается обычным окном, чтобы Windows спросила права администратора. Portable: новый exe копируется рядом с текущим и запускается. Можно выбрать любую версию, в том числе старее текущей.
+- Electron-updater не используется: он умеет только «до последней», не поддерживает portable и требует `latest.yml` в релизе.
+- Проверка при запуске через 5 секунд, выключается в Настройках (`settings.updateCheck`); без сети она молчит. Баннер «Доступна версия» закрывается до следующей версии (localStorage `update.dismissed`).
+- IPC: `update:state`, `update:check`, `update:download(version)`, `update:cancel`, `update:install`; состояние рассылается во все окна событием `update:state`. Renderer: `renderer/src/update/UpdatePanel.tsx`.
+- Тест: `npm run test:update` (поддельный GitHub: выбор файла, порядок версий, контрольная сумма, portable, офлайн; `LIVE=1` дополнительно спрашивает настоящий).
