@@ -1,4 +1,5 @@
 import type { ForeignOptions, ForeignPlan, ForeignPreview, HostKeyPrompt, HostStatus, ImportMode, ImportPreview, SessionInfo, Store, StoreSnapshot } from './types'
+import type { UpdateState } from './update'
 import type { DnsQuery, DnsResult, ToolEvent, ToolKind, ToolParams } from './tools'
 
 /** API exposed to the renderer as window.api. Secrets go in via setSecret and never come back out. */
@@ -52,4 +53,13 @@ export interface Api {
   toolStop(runId: string): void
   onToolEvent(cb: (runId: string, ev: ToolEvent) => void): () => void
   dnsQuery(q: DnsQuery): Promise<DnsResult>
+  /** Updates from GitHub Releases: state lives in the main process and is pushed to every window. */
+  updateState(): Promise<UpdateState>
+  updateCheck(): Promise<UpdateState>
+  /** Any listed version, newer or older. Network and checksum errors end up in the state. */
+  updateDownload(version: string): Promise<UpdateState>
+  updateCancel(): void
+  /** Closes Pult and runs the downloaded installer; Pult starts again after it. */
+  updateInstall(): Promise<void>
+  onUpdate(cb: (s: UpdateState) => void): () => void
 }

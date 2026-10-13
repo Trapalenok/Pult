@@ -18,7 +18,8 @@
     "test:tools": "node --experimental-strip-types test/net-tools.mjs",
     "test:socks5": "node --experimental-strip-types test/socks5.mjs",
     "test:inherit": "esbuild test/inherit.mjs --bundle --platform=node --format=esm --alias:@shared=./src/shared --log-level=warning --outfile=out/test/inherit.mjs && node out/test/inherit.mjs",
-    "test:burst": "esbuild test/burst-open.mjs --bundle --platform=node --format=esm --external:ssh2 --log-level=warning --outfile=out/test/burst-open.mjs && node out/test/burst-open.mjs"
+    "test:burst": "esbuild test/burst-open.mjs --bundle --platform=node --format=esm --external:ssh2 --log-level=warning --outfile=out/test/burst-open.mjs && node out/test/burst-open.mjs",
+    "test:update": "esbuild test/update.mjs --bundle --platform=node --format=esm --alias:@shared=./src/shared --alias:electron=./test/stubs/electron.mjs --log-level=warning --outfile=out/test/update.mjs && node out/test/update.mjs"
   },
   "dependencies": {
     "net-snmp": "^3.29.2",

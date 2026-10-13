@@ -128,6 +128,8 @@ export interface AppSettings {
   jump?: JumpHost
   /** Blinking port LEDs and traffic along links on the map. On by default. */
   animations?: boolean
+  /** Look for a new release on GitHub at start. On by default. */
+  updateCheck?: boolean
 }
 
 /**

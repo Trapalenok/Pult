@@ -5,11 +5,14 @@ import { THEMES, themeById } from '../design/themes'
 import { TintPicker } from '../sheets/fields'
 import { ALGO_LABEL, errorText, plural } from '../util'
 import { ForeignImport } from './ForeignImport'
+import { UpdateGroup } from '../update/UpdatePanel'
+import type { UpdateState } from '@shared/update'
 
-export function SettingsScreen({ settings, credentials, folders, onChange, onOpenCredentials, onImported }: {
+export function SettingsScreen({ settings, credentials, folders, update, onChange, onOpenCredentials, onImported }: {
   settings: AppSettings
   credentials: Credential[]
   folders: Folder[]
+  update: UpdateState | null
   onChange(s: AppSettings): void
   onOpenCredentials(): void
   onImported(s: StoreSnapshot): void
@@ -27,6 +30,8 @@ export function SettingsScreen({ settings, credentials, folders, onChange, onOpe
         <div className="screen__head">
           <h1>Настройки</h1>
         </div>
+
+        <UpdateGroup state={update} checkAtStart={settings.updateCheck !== false} onCheckAtStart={(v) => set('updateCheck', v)} />
 
         <Group
           header="Jump-host"

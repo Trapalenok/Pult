@@ -39,7 +39,13 @@ const api: Api = {
   toolStart: (runId, kind, params) => ipcRenderer.send('tools:start', runId, kind, params),
   toolStop: (runId) => ipcRenderer.send('tools:stop', runId),
   onToolEvent: (cb) => subscribe('tools:event', cb),
-  dnsQuery: (q) => ipcRenderer.invoke('tools:dns', q)
+  dnsQuery: (q) => ipcRenderer.invoke('tools:dns', q),
+  updateState: () => ipcRenderer.invoke('update:state'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateDownload: (version) => ipcRenderer.invoke('update:download', version),
+  updateCancel: () => ipcRenderer.send('update:cancel'),
+  updateInstall: () => ipcRenderer.invoke('update:install'),
+  onUpdate: (cb) => subscribe('update:state', cb)
 }
 
 contextBridge.exposeInMainWorld('api', api)
