@@ -1,6 +1,6 @@
 {
   "name": "ssh-client",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Pult: local network console with SSH, web UI, WinBox, network tools and an encrypted local base",
   "main": "./out/main/index.js",
   "private": true,
