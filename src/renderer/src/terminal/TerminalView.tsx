@@ -35,6 +35,10 @@ export function noticeToTerminal(sessionId: string, text: string): void {
   terminals.get(sessionId)?.term.write(text)
 }
 
+/** What a terminal shows when its connection is gone. */
+export const closedNotice = (reason: string) =>
+  `\r\n\x1b[33m[сессия закрыта: ${reason}]\x1b[0m\r\n\x1b[2mEnter или «Переподключить»: подключиться снова в этом окне\x1b[0m\r\n`
+
 export function focusTerminal(sessionId: string): void {
   terminals.get(sessionId)?.term.focus()
 }
@@ -116,6 +120,8 @@ export function TerminalView({ sessionId, visible, focused, onInput }: Props) {
     const media = matchMedia('(prefers-color-scheme: dark)')
     const onScheme = () => {
       term.options.theme = themeFromTokens()
+      // The design system brings its own mono font (JetBrains Mono / IBM Plex Mono).
+      term.options.fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--font-mono')
       term.options.fontSize = Number(getComputedStyle(document.documentElement).getPropertyValue('--term-font-size')) || 13
       if (el.current?.offsetParent) f.fit()
     }

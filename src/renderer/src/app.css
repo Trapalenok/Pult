@@ -16,12 +16,23 @@
   display: flex; align-items: center; gap: var(--space-3); flex: none; height: var(--titlebar-h);
   padding: 0 var(--space-2); font: var(--text-headline); letter-spacing: var(--tracking-title); color: var(--label-1);
 }
-.sidebar__brand svg { color: var(--tint); }
+.sidebar__brand > svg { color: var(--tint); }
 :root[data-platform='darwin'] .sidebar__brand { padding-left: 80px; }
 .sidebar__nav { display: flex; flex-direction: column; gap: var(--space-1); }
 .sidebar__section { margin-top: var(--space-5); }
 .sidebar__section h4 { margin: 0 var(--space-3) var(--space-3); font: var(--text-caption); letter-spacing: var(--tracking-caption); text-transform: uppercase; color: var(--label-3); }
 .sidebar__spacer { flex: 1; }
+.sidebar__brand-name { flex: 1; }
+.sidebar__brand .ds-iconbtn { color: var(--label-3); }
+
+/* Folded sidebar: a strip of icons, everything else goes to the folder or the map. */
+.app.is-rail { grid-template-columns: 52px minmax(0, 1fr); }
+.app.is-rail .sidebar { padding-left: 6px; padding-right: 6px; overflow-x: hidden; }
+.app.is-rail .sidebar__brand { justify-content: center; padding: 0; }
+.app.is-rail .sidebar__brand > svg, .app.is-rail .sidebar__brand-name, .app.is-rail .sidebar__section,
+.app.is-rail .nav-item > span:not(.ds-badge), .app.is-rail .nav-item__count { display: none; }
+.app.is-rail .nav-item { position: relative; justify-content: center; padding: 0; }
+.app.is-rail .nav-item .ds-badge { position: absolute; top: 1px; right: 1px; height: 15px; min-width: 15px; padding: 0 3px; font-size: 10px; }
 .nav-item {
   display: flex; align-items: center; gap: var(--space-3); width: 100%; height: 36px; padding: 0 var(--space-3);
   border: 0; border-radius: var(--radius-md); background: transparent; color: var(--label-2); text-align: left;
@@ -68,8 +79,9 @@
 .card:hover { box-shadow: var(--shadow-raised), 0 0 0 1px var(--separator-opaque); }
 .card:active { transform: scale(0.985); }
 .card__text { flex: 1; min-width: 0; }
-.card__title { display: flex; align-items: center; gap: var(--space-3); font: var(--text-body-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card__sub { margin-top: var(--space-1); font: var(--text-footnote); color: var(--label-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Long names and addresses wrap: the card grows taller instead of cutting the text off. */
+.card__title { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-3); row-gap: 2px; font: var(--text-body-strong); overflow-wrap: anywhere; }
+.card__sub { margin-top: var(--space-1); font: var(--text-footnote); color: var(--label-2); overflow-wrap: anywhere; }
 .card__sub.mono { font: var(--text-mono-sm); }
 .card__badges { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
 .card__path { display: inline-flex; align-items: center; gap: var(--space-1); font: var(--text-footnote); color: var(--label-3); }
@@ -79,6 +91,7 @@
 }
 .card[draggable='true'] { -webkit-user-drag: element; }
 .card.is-picked { background: var(--tint-soft); box-shadow: var(--shadow-card), 0 0 0 2px var(--tint); }
+.card.is-focused:not(.is-picked) { box-shadow: var(--shadow-card), 0 0 0 1.5px var(--tint); }
 .pick-bar {
   position: absolute; z-index: 30; left: 50%; bottom: var(--space-5); transform: translateX(-50%);
   display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
@@ -86,7 +99,7 @@
 }
 .pick-bar__count { font: var(--text-callout); font-weight: 600; font-variant-numeric: tabular-nums; }
 .card .ds-menu { opacity: 0; transition: opacity var(--dur-fast); }
-.card:hover .ds-menu, .card .ds-menu:focus-within { opacity: 1; }
+.card:hover .ds-menu, .card .ds-menu:focus-within, .card .ds-menu.is-open { opacity: 1; }
 
 /* ── Tab strip ────────────────────────────────────────────── */
 .tabstrip { display: flex; align-items: center; gap: var(--space-1); min-width: 0; overflow-x: auto; scrollbar-width: none; }
@@ -126,28 +139,18 @@
   background: var(--bg-surface); border-bottom: 1px solid var(--separator);
 }
 .pane__title { font: var(--text-callout); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane__addr { font-size: 11.5px; color: var(--label-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .pane__closed { font: var(--text-footnote); color: var(--label-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pane__spacer { flex: 1; }
+.pane__reconnect { flex: none; height: 24px; }
 .pane__term { flex: 1; min-height: 0; padding: var(--space-3) 0 0 var(--space-4); }
 .terminal-view { width: 100%; height: 100%; }
 .terminal-view .xterm-viewport { background: transparent !important; }
 
-/* ── Broadcast bar ────────────────────────────────────────── */
-.broadcast {
-  display: flex; align-items: center; gap: var(--space-3); flex: none; height: 48px; padding: 0 var(--space-4);
-  background: var(--bg-chrome); border-top: 1px solid var(--separator); color: var(--label-3);
-}
-.broadcast.is-armed { color: var(--orange); }
-/* Synchronous input on: every key goes to every marked session, so it must be impossible to miss. */
-.broadcast.is-sync { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); box-shadow: inset 0 2px 0 var(--red); }
-.broadcast__count { font: var(--text-callout); font-variant-numeric: tabular-nums; color: var(--label-2); min-width: 48px; }
-.broadcast__input {
-  flex: 1; height: var(--control-md); padding: 0 var(--space-4); border: 0; border-radius: var(--radius-md);
-  background: var(--bg-input); box-shadow: inset 0 0 0 1px var(--separator); color: var(--label-1); outline: none; user-select: text; font: var(--text-mono);
-}
-.broadcast__input:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange) 60%, transparent); }
-.broadcast__input::placeholder { color: var(--label-3); font-family: var(--font-ui); }
-.broadcast__sync { display: flex; align-items: center; gap: var(--space-3); font: var(--text-callout); color: var(--label-2); white-space: nowrap; }
+/* ── Broadcast button (sessions toolbar) ─────────────────── */
+/* On: every key typed in a marked session goes to all marked sessions on screen, so it must be impossible to miss. */
+.bc-toggle.is-on { background: var(--orange); color: #fff; }
+.bc-toggle.is-on:hover:not(:disabled) { background: color-mix(in srgb, var(--orange) 85%, #000); }
 
 /* ── Sheets ───────────────────────────────────────────────── */
 .tint-picker { display: flex; gap: var(--space-3); padding: var(--space-2) 0; }
@@ -178,6 +181,7 @@
 .warn { color: var(--orange); }
 
 /* ── Breadcrumbs ──────────────────────────────────────────── */
+.crumbs__back { flex: none; margin-right: calc(var(--space-2) * -1); }
 .crumbs { display: flex; align-items: center; gap: var(--space-1); min-width: 0; overflow: hidden; color: var(--label-3); }
 .crumbs__item { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; }
 .crumbs button {
@@ -197,6 +201,7 @@
 .metric { display: inline-flex; align-items: center; gap: var(--space-1); font: var(--text-footnote); color: var(--label-2); font-variant-numeric: tabular-nums; }
 .metric.warn { color: var(--orange); }
 .metric.bad { color: var(--red); }
+.metric.dim { color: var(--label-3); }
 .card__path { display: flex; align-items: center; gap: var(--space-1); margin-top: var(--space-2); font: var(--text-footnote); color: var(--label-3); }
 
 /* ── Sidebar tree ─────────────────────────────────────────── */
@@ -253,6 +258,12 @@
 .map-palette__item.is-placed { color: var(--label-2); }
 .map-palette__item svg { color: var(--green); }
 .map-canvas { position: relative; min-width: 0; min-height: 0; }
+.map-layout.no-palette { grid-template-columns: minmax(0, 1fr); }
+.map-backdrop { width: 100%; height: 100%; }
+.map-backdrop img { display: block; width: 100%; height: 100%; object-fit: fill; user-select: none; pointer-events: none; }
+.map-backdrop.is-unlocked { outline: 1.5px dashed var(--tint); outline-offset: 2px; cursor: move; }
+.map-backdrop__missing { display: grid; place-items: center; width: 100%; height: 100%; border: 1px dashed var(--separator-opaque); color: var(--label-3); font: var(--text-footnote); }
+.map-opacity { width: 120px; accent-color: var(--tint); }
 .map-hint { position: absolute; left: 50%; bottom: var(--space-3); transform: translateX(-50%); pointer-events: none; white-space: nowrap; max-width: calc(100% - 120px); overflow: hidden; text-overflow: ellipsis; padding: var(--space-1) var(--space-3); border-radius: var(--radius-pill); background: color-mix(in srgb, var(--bg-elevated) 80%, transparent); }
 .map-context { position: fixed; top: 0; right: auto; z-index: 60; max-width: 340px; }
 .map-context .ds-menu__item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -313,7 +324,7 @@
 .minimap-node.is-down { fill: var(--red); }
 
 .map-node {
-  display: flex; align-items: center; gap: var(--space-3); width: 200px; padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  display: flex; align-items: center; gap: var(--space-3); width: calc(200px * var(--map-scale, 1)); padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
   border-radius: var(--radius-lg); background: var(--bg-elevated); box-shadow: var(--shadow-raised), 0 0 0 1px var(--separator);
   transition: box-shadow var(--dur-fast);
 }
@@ -323,13 +334,17 @@
 .map-node__icon { position: relative; flex: none; }
 .map-node__icon .ds-health { position: absolute; right: -3px; bottom: -3px; box-shadow: 0 0 0 2px var(--bg-elevated); }
 .map-node__text { min-width: 0; }
-.map-node__name { font: var(--text-body-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--label-1); }
-.map-node__addr { font: var(--text-mono-sm); font-size: 11px; color: var(--label-2); }
-.map-node__metrics { display: flex; gap: var(--space-3); margin-top: 2px; font: var(--text-footnote); font-size: 11px; color: var(--label-2); font-variant-numeric: tabular-nums; }
+.map-node__name { font: var(--text-body-strong); font-size: calc(14px * var(--map-scale, 1)); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--label-1); }
+/* Settings → Карта сети → «Подписи целиком» (on by default): long names wrap instead of ending in "…". */
+:root[data-map-names='full'] .map-node__name { white-space: normal; overflow-wrap: anywhere; }
+.map-node__addr { font: var(--text-mono-sm); font-size: calc(11px * var(--map-scale, 1)); color: var(--label-2); }
+.map-node .ds-tile--md { width: calc(var(--icon-tile) * var(--map-scale, 1)); height: calc(var(--icon-tile) * var(--map-scale, 1)); }
+.map-node .ds-tile svg { width: calc(20px * var(--map-scale, 1)); height: calc(20px * var(--map-scale, 1)); }
+.map-node__metrics { display: flex; gap: var(--space-3); margin-top: 2px; font: var(--text-footnote); font-size: calc(11px * var(--map-scale, 1)); color: var(--label-2); font-variant-numeric: tabular-nums; }
 .map-node__metrics .ssh { color: var(--green); font-weight: 600; }
 .map-label {
   padding: var(--space-2) var(--space-4); border-radius: var(--radius-pill); background: var(--bg-elevated);
-  font: var(--text-callout); color: var(--label-1); border: 1px dashed var(--separator-opaque);
+  font: var(--text-callout); font-size: calc(13px * var(--map-scale, 1)); color: var(--label-1); border: 1px dashed var(--separator-opaque);
 }
 .map-label.is-selected { border-color: var(--tint); }
 
@@ -402,6 +417,9 @@
   .pane__bar .ds-iconbtn:not([aria-pressed="true"]):not(:last-child) { display: none; }
   .pane:hover .pane__bar .ds-iconbtn { display: inline-flex; }
   .pane__title { font-size: 12px; }
+  .pane__addr { display: none; }
+  .pane__closed { display: none; }
+  .pane__reconnect > span { display: none; }
 }
 
 /* ── Import from another base: preview tables ──────────────── */
@@ -420,3 +438,17 @@
 .sidebar__section h4 { display: flex; align-items: center; justify-content: space-between; }
 .sidebar__hint { margin: 0 var(--space-3); font: var(--text-footnote); color: var(--label-3); }
 .ws-open { color: var(--green); margin-right: var(--space-2); font-size: 8px; vertical-align: middle; }
+
+/* Extra addresses in the host sheet: the field and its remove button side by side. */
+.addr-row { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; }
+.addr-row .ds-field { flex: 1; min-width: 0; }
+/* A host's addresses on its card: the one in use is plain, one that does not answer is red. */
+.host-addr { color: var(--label-3); }
+.host-addr.is-pref { color: inherit; }
+.host-addr.is-down { color: var(--red); }
+.card__sub--addrs { display: flex; flex-wrap: wrap; column-gap: var(--space-3); white-space: normal; }
+.card__sub--addrs .host-addr { white-space: nowrap; }
+
+/* Settings → Цвета терминала */
+.color-input { width: 44px; height: 26px; padding: 0 2px; border: 1px solid var(--separator-opaque); border-radius: var(--radius-sm); background: var(--bg-elevated); cursor: pointer; }
+.term-sample { margin: var(--space-2) var(--space-5) var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); font-size: 13px; }

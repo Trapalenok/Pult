@@ -29,6 +29,12 @@ export function ForeignImport({ folders, onImported }: { folders: Folder[]; onIm
   const [plan, setPlan] = useState<ForeignPlan | null>(null)
   const [planError, setPlanError] = useState<string | null>(null)
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
+  // The result line goes away by itself, like the error toasts.
+  useEffect(() => {
+    if (!note) return
+    const t = setTimeout(() => setNote(null), 12000)
+    return () => clearTimeout(t)
+  }, [note])
   const [busy, setBusy] = useState(false)
 
   const t = preview?.tables.find((x) => x.name === table)

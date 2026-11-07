@@ -28,14 +28,21 @@ function list(kind: Kind, profile: AlgoProfile): string[] {
   // The runtime crypto backend (OpenSSL / BoringSSL) may lack e.g. 3des; never hand ssh2 an unsupported name.
   const legacy = LEGACY[kind].filter((a) => supported.has(a) && !defaults.includes(a))
   if (profile === 'modern') return [...defaults]
-  if (profile === 'compat') return [...defaults, ...legacy]
+  // Legacy DH is much slower on older switches. Even in the legacy profile, try a modern
+  // key exchange first when the device supports one; old KEX methods stay available as fallback.
+  if (profile === 'legacy' && kind === 'kex') return [...defaults, ...legacy]
+  // Host key types: the server uses the first one in our list it has a key for. Putting ssh-dss first
+  // made a switch that has both an old DSA key and a newer RSA/ECDSA key present the DSA one, so a
+  // freshly made key was never used. DSA stays a last resort in every profile.
+  if (profile === 'compat' || kind === 'serverHostKey') return [...defaults, ...legacy]
   return [...legacy, ...defaults]
 }
 
 /**
  * modern: ssh2 defaults.
  * compat: defaults first, legacy appended, so new servers still negotiate modern algorithms.
- * legacy: legacy first, for devices that pick the client's first offer badly.
+ * legacy: old ciphers/MACs first; KEX methods still prefer modern ones for faster handshakes, with
+ * old DH available as fallback. Host key types prefer newer keys, with ssh-dss last.
  */
 export function algorithmsFor(profile: AlgoProfile): Algorithms {
   return {

@@ -27,6 +27,13 @@ export function HostKeySheet({ prompt, queued, onAnswer, onTrustAllNew }: {
             Ключ {prompt.hostName} не совпадает с сохранённым. Так бывает после замены коммутатора или сброса конфигурации, но так же выглядит и перехват соединения. Подключайтесь, только если знаете причину.
           </Banner>
         </div>
+      ) : prompt.otherTypes?.length ? (
+        <p className="sheet-lead">
+          <b>{prompt.hostName}</b> предложил ключ другого типа: <span className="mono">{prompt.keyType}</span> вместо
+          сохранённого <span className="mono">{prompt.otherTypes.join(', ')}</span>. Так бывает при смене профиля алгоритмов,
+          у устройства несколько ключей. Сверьте отпечаток (<span className="mono">display ssh server-info</span>) и подтвердите;
+          старый ключ тоже останется доверенным.
+        </p>
       ) : (
         <p className="sheet-lead">
           Вы подключаетесь к <b>{prompt.hostName}</b> впервые. Сверьте отпечаток с выводом на устройстве

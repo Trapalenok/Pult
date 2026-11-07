@@ -118,8 +118,16 @@ function objectsToTable(name: string, items: Record<string, unknown>[]): RawTabl
  * {"hosts": [...], "groups": [...]}. A map of objects ({"sw1": {...}, "sw2": {...}}) counts too,
  * its keys going into a "key" column.
  */
+class PultConfigError extends Error {}
+
 export function parseJson(text: string): RawFile {
   const root: unknown = JSON.parse(text)
+  if (isObj(root) && root.format === 'ssh-client-config') {
+    throw new PultConfigError('Это экспорт Pult. Откройте Настройки → Перенос конфигурации → Импорт. Там будут восстановлены учётные записи и запрошен пароль файла, если он содержит зашифрованные пароли.')
+  }
+  if (isObj(root) && Array.isArray(root.hosts) && Array.isArray(root.folders) && isObj(root.secrets) && isObj(root.knownHosts)) {
+    throw new PultConfigError('Это рабочий store.json Pult. Его пароли привязаны к исходной системе. На исходном ПК выполните «Перенос конфигурации → Экспорт» с включёнными паролями, затем импортируйте полученный файл через «Перенос конфигурации → Импорт».')
+  }
   const tables: RawTable[] = []
   const walk = (v: unknown, path: string, depth: number) => {
     if (depth > 4) return
@@ -149,7 +157,8 @@ export function readForeign(buf: Uint8Array, fileName: string, SQL: () => Promis
   if (/^\s*[[{]/.test(text)) {
     try {
       return parseJson(text)
-    } catch {
+    } catch (e) {
+      if (e instanceof PultConfigError) throw e
       if (/\.json$/i.test(fileName)) throw new Error('JSON-файл не читается: в нём ошибка синтаксиса')
     }
   }
@@ -255,6 +264,9 @@ export function previewTables(file: RawFile): { tables: ForeignTable[]; bestTabl
 
 /* ── Building hosts ────────────────────────────────────────── */
 
+/** MAX_ADDRESSES - 1 from shared/types; kept local so this file stays type-only-importing for the node test. */
+const EXTRA_ADDRESSES = 2
+
 /** "admin@10.0.0.1:2222" → its parts. */
 export function splitAddress(raw: string): { address: string; port?: number; username?: string } {
   let s = raw.trim().replace(/^ssh:\/\//i, '').replace(/\/.*$/, '')
@@ -359,7 +371,10 @@ export function buildImport(
       plan.notSsh++
       continue
     }
-    const parts = splitAddress(get.address(r))
+    // A cell may list several addresses of one device ("10.0.0.1, 10.1.0.1"): the first is the main one.
+    const [first = '', ...more] = get.address(r).split(/[,;\s]+/).filter(Boolean)
+    const parts = splitAddress(first)
+    const extra = [...new Set(more.map((m) => splitAddress(m).address).filter((a) => a && a !== parts.address))].slice(0, EXTRA_ADDRESSES)
     if (!parts.address) {
       plan.noAddress++
       continue
@@ -385,6 +400,7 @@ export function buildImport(
       folderId,
       name: get.name(r) || parts.address,
       address: parts.address,
+      ...(extra.length ? { addresses: extra } : {}),
       overrides: { ...(port && port !== 22 ? { port } : {}), ...(username ? { username } : {}) }
     }
     hosts.push(host)

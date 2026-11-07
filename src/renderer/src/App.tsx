@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { snmpSecretId, type AppSettings, type Credential, type Folder, type Host, type HostKeyPrompt, type HostStatus, type NetMap, type StoreSnapshot, type Workspace } from '@shared/types'
-import { Badge, Banner, HealthDot, IconButton } from './design/components'
+import { Badge, Banner, ContextMenuHost, HealthDot, IconButton, openContextMenu, type MenuItem } from './design/components'
 import { dropTarget, type MoveItems } from './dnd'
 import { Icon, type IconName } from './design/icons'
-import { applyTheme } from './design/themes'
+import { applyTheme, designOf, themeById } from './design/themes'
 import { MapScreen } from './map/MapScreen'
 import { CredentialsScreen } from './screens/CredentialsScreen'
 import { HostsScreen } from './screens/HostsScreen'
@@ -18,12 +18,15 @@ import { HostKeySheet } from './sheets/HostKeySheet'
 import { HostSheet, type SecretEdits } from './sheets/HostSheet'
 import type { PaneSession } from './terminal/TerminalPane'
 import { WorkspaceSheet } from './sheets/WorkspaceSheet'
-import { noticeToTerminal, writeToTerminal } from './terminal/TerminalView'
-import { describeOwn, errorText, healthSummary, hostsInSubtree, hostTint, inheritFromFolders, kindMeta, moveInto, newId, ownSummary, subtreeIds } from './util'
+import { closedNotice, noticeToTerminal, writeToTerminal } from './terminal/TerminalView'
+import { ask, choose, ConfirmHost } from './design/confirm'
+import { contentsText, deletionScope, describeOwn, errorText, healthSummary, hostsInSubtree, hostTint, inheritFromFolders, kindMeta, moveInto, newId, ownSummary, plural, removeItems, subtreeIds } from './util'
+
+const DEL = { ok: 'Удалить', destructive: true }
 
 type Screen = 'hosts' | 'sessions' | 'map' | 'tools' | 'credentials' | 'settings'
 type Editing =
-  | { kind: 'host'; host: Host | null }
+  | { kind: 'host'; host: Host | null; folderId?: string | null }
   | { kind: 'folder'; folder: Folder | null; parentId: string | null }
   | { kind: 'credential'; credential: Credential | null }
   | { kind: 'appearance'; folderIds: string[]; hostIds: string[] }
@@ -37,10 +40,22 @@ export function App() {
   const [toolsOpen, setToolsOpen] = useState(false)
   useEffect(() => void (screen === 'tools' && setToolsOpen(true)), [screen])
   const [folderId, setFolderId] = useState<string | null>(null)
+  /** Folders opened before the current one, for "Назад" on the hosts screen (null: the top level). */
+  const [folderHistory, setFolderHistory] = useState<(string | null)[]>([])
   const [editing, setEditing] = useState<Editing>(null)
   const [error, setError] = useState<{ title: string; text: string } | null>(null)
+  /** The pointer is on the error: it stays until the pointer leaves. */
+  const [errorHeld, setErrorHeld] = useState(false)
+  // Errors go away by themselves; a longer text stays longer.
+  useEffect(() => {
+    if (!error || errorHeld) return
+    const t = setTimeout(() => setError(null), Math.min(15000, 6000 + (error.title.length + error.text.length) * 30))
+    return () => clearTimeout(t)
+  }, [error, errorHeld])
   const [status, setStatus] = useState<Map<string, HostStatus>>(new Map())
   const [keyPrompts, setKeyPrompts] = useState<HostKeyPrompt[]>([])
+  /** Set by "Доверять всем новым" until every pending connection is through. */
+  const trustNewRef = useRef(false)
 
   const [sessions, setSessions] = useState<PaneSession[]>([])
   const [detached, setDetached] = useState<Set<string>>(new Set())
@@ -59,7 +74,11 @@ export function App() {
   /** Sidebar folder under a dragged host. */
   const [dropOver, setDropOver] = useState<string | null | undefined>(undefined)
   const [group, setGroup] = useState<Set<string>>(new Set())
-  const [syncInput, setSyncInput] = useState(false)
+  /** Broadcast on (the button on the sessions screen): typing goes to every marked session on screen. */
+  const [broadcast, setBroadcast] = useState(false)
+  /** Sidebar folded to a strip of icons, for more room in a folder or on the map. Kept across restarts. */
+  const [rail, setRail] = useState(() => loadFlag(RAIL_KEY))
+  const toggleRail = () => setRail((r) => (saveFlag(RAIL_KEY, !r), !r))
   const [treeOpen, setTreeOpen] = useState<Set<string>>(loadTreeOpen)
   const toggleTreeFolder = useCallback((id: string) => {
     setTreeOpen((o) => {
@@ -81,10 +100,16 @@ export function App() {
         return n
       })
     )
-    const offKey = window.api.onHostKeyPrompt((p) => setKeyPrompts((q) => [...q, p]))
+    const offKey = window.api.onHostKeyPrompt((p) => {
+      // "Доверять всем новым" holds for the rest of the pack being opened: hosts still in the queue don't ask again.
+      if (trustNewRef.current && !p.previous) return window.api.answerHostKey(p.requestId, true)
+      setKeyPrompts((q) => [...q, p])
+    })
+    const offKeyCancel = window.api.onHostKeyCancel((id) => setKeyPrompts((q) => q.filter((p) => p.requestId !== id)))
+    const offStore = window.api.onStoreChanged(setStore)
     const offData = window.api.onData(writeToTerminal)
     const offClosed = window.api.onClosed((id, reason) => {
-      noticeToTerminal(id, `\r\n\x1b[33m[сессия закрыта: ${reason}]\x1b[0m\r\n`)
+      noticeToTerminal(id, closedNotice(reason))
       setSessions((s) => s.map((x) => (x.sessionId === id ? { ...x, closed: reason } : x)))
       setGroup((g) => without(g, id))
     })
@@ -94,8 +119,13 @@ export function App() {
       const groupId = sessionsRef.current.find((x) => x.sessionId === s.sessionId)?.groupId
       setActiveTab(groupId ? groupKey(groupId) : s.sessionId)
     })
-    return () => (offMonitor(), offKey(), offData(), offClosed(), offReturned())
+    return () => (offMonitor(), offKey(), offKeyCancel(), offStore(), offData(), offClosed(), offReturned())
   }, [])
+
+  // Once React has committed the first screen with the base, the start-up logo window gives way to this one.
+  // An effect, not a timer or requestAnimationFrame: the window is still hidden, and Chromium holds both back there.
+  const loaded = store !== null
+  useEffect(() => void (loaded && window.api.ready()), [loaded])
 
   const save = async (next: StoreSnapshot) => {
     // Shown at once: until the main process answers, a status update would otherwise
@@ -114,14 +144,14 @@ export function App() {
    * or the error.
    */
   const connect = useCallback(
-    async (hostId: string, groupId?: string): Promise<string | Error | null> => {
+    async (hostId: string, groupId?: string, address?: string): Promise<string | Error | null> => {
       const host = store?.hosts.find((h) => h.id === hostId)
       if (!host) return null
       const key = crypto.randomUUID()
       setPending((p) => [...p, { key, hostId, title: host.name, groupId }])
       setScreen('sessions')
       try {
-        const s = await window.api.connect(hostId, 120, 32)
+        const s = await window.api.connect(hostId, 120, 32, address)
         if (groupId && closedGroups.current.has(groupId)) {
           window.api.close(s.sessionId)
           return null
@@ -201,21 +231,68 @@ export function App() {
     setKeyPrompts(rest)
   }
 
+  useEffect(() => {
+    if (!pending.length) trustNewRef.current = false
+  }, [pending.length])
+
   const trustAllNew = () => {
+    trustNewRef.current = pending.length > 0
     keyPrompts.filter((p) => !p.previous).forEach((p) => window.api.answerHostKey(p.requestId, true))
     setKeyPrompts((q) => q.filter((p) => p.previous))
   }
 
   const attached = sessions.filter((s) => !detached.has(s.sessionId))
-  /** Broadcast and synchronous input never reach sessions that are not on screen. */
+  /** Broadcast never reaches sessions that are not on screen. */
   const onScreen = new Set(visibleSessions(attached, activeTab, layout).map((s) => s.sessionId))
   const onInput = (sessionId: string, data: string) => {
+    // Enter in a closed session's terminal connects it again, like the button in its header.
+    if (data === '\r' && sessionsRef.current.find((x) => x.sessionId === sessionId)?.closed) return void reconnect(sessionId)
     const g = groupRef.current
-    if (syncInput && g.has(sessionId) && onScreen.has(sessionId)) window.api.broadcast([...g].filter((id) => onScreen.has(id)), data)
+    if (broadcast && g.has(sessionId) && onScreen.has(sessionId)) window.api.broadcast([...g].filter((id) => onScreen.has(id)), data)
     else window.api.write(sessionId, data)
   }
 
+  /** Sessions with a reconnect on its way: a second Enter or click waits for the first. */
+  const reconnectingRef = useRef(new Set<string>())
+  const reconnectAttemptsRef = useRef(new Map<string, number>())
+  /** The same session, same pane, same tab and group: only the connection behind it is new. */
+  const reconnect = async (id: string) => {
+    const s = sessionsRef.current.find((x) => x.sessionId === id)
+    if (!s?.closed || reconnectingRef.current.has(id)) return
+    reconnectingRef.current.add(id)
+    const mark = (patch: Partial<PaneSession>) => setSessions((x) => x.map((y) => (y.sessionId === id ? { ...y, ...patch } : y)))
+    mark({ reconnecting: true })
+    noticeToTerminal(id, `\x1b[36m[переподключение к ${s.address ?? s.title}…]\x1b[0m\r\n`)
+    try {
+      const r = await window.api.reconnect(id, s.hostId, s.address)
+      reconnectAttemptsRef.current.delete(id)
+      mark({ closed: undefined, reconnecting: false, address: r.address })
+    } catch (e) {
+      mark({ reconnecting: false })
+      noticeToTerminal(id, `\x1b[31m[не удалось: ${errorText(e).replace(/\n/g, '\r\n')}]\x1b[0m\r\n\x1b[2mEnter или «Переподключить»: попробовать ещё раз\x1b[0m\r\n`)
+    } finally {
+      reconnectingRef.current.delete(id)
+    }
+  }
+
+  // A dropped SSH transport is commonly a device-side idle timer. Keep the pane and retry
+  // the handshake automatically; slow the retries down while the device is unavailable.
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = []
+    for (const s of sessions) {
+      if (!s.closed || s.reconnecting || reconnectingRef.current.has(s.sessionId)) continue
+      const attempt = reconnectAttemptsRef.current.get(s.sessionId) ?? 0
+      const delay = Math.min(30_000, 2_000 * 2 ** Math.min(attempt, 4))
+      timers.push(setTimeout(() => {
+        reconnectAttemptsRef.current.set(s.sessionId, attempt + 1)
+        void reconnect(s.sessionId)
+      }, delay))
+    }
+    return () => timers.forEach(clearTimeout)
+  }, [sessions])
+
   const closeSession = (id: string) => {
+    reconnectAttemptsRef.current.delete(id)
     window.api.close(id)
     setSessions((s) => {
       const rest = s.filter((x) => x.sessionId !== id)
@@ -227,13 +304,13 @@ export function App() {
   }
 
   /** Closes a tab: one session, or every session of a group (asked first when there are several). */
-  const closeTab = (key: string) => {
+  const closeTab = async (key: string) => {
     if (!key.startsWith('g:')) return closeSession(key)
     const g = groups.find((x) => groupKey(x.id) === key)
     if (!g) return
     const members = sessions.filter((s) => s.groupId === g.id)
     const live = members.filter((s) => !s.closed).length
-    if (live > 1 && !confirm(`Закрыть «${g.title}»: ${live} сессий?`)) return
+    if (live > 1 && !(await ask(`Закрыть «${g.title}»: ${live} сессий?`, { ok: 'Закрыть', destructive: true }))) return
     closedGroups.current.add(g.id)
     members.forEach((s) => window.api.close(s.sessionId))
     const ids = new Set(members.map((s) => s.sessionId))
@@ -246,7 +323,7 @@ export function App() {
   const popout = (s: PaneSession) => {
     setDetached((d) => new Set(d).add(s.sessionId))
     setGroup((g) => without(g, s.sessionId))
-    window.api.popout({ sessionId: s.sessionId, hostId: s.hostId, title: s.title })
+    window.api.popout({ sessionId: s.sessionId, hostId: s.hostId, title: s.title, address: s.address })
   }
 
   /* ── Saving hosts, folders, accounts ─────────────────────── */
@@ -322,8 +399,8 @@ export function App() {
     await persist({ ...store, credentials: exists ? store.credentials.map((x) => (x.id === c.id ? c : x)) : [...store.credentials, c] }, password ? [[c.id, password]] : [])
   }
 
-  const deleteCredential = (c: Credential) => {
-    if (!store || !confirm(`Удалить учётку «${c.name}»?`)) return
+  const deleteCredential = async (c: Credential) => {
+    if (!store || !(await ask(`Удалить учётку «${c.name}»?`, DEL))) return
     const unset = <T extends { credentialId?: string }>(d: T) => (d.credentialId === c.id ? { ...d, credentialId: undefined } : d)
     save({
       ...store,
@@ -334,27 +411,51 @@ export function App() {
     setEditing(null)
   }
 
-  const deleteHost = (host: Host) => {
-    if (!store || !confirm(`Удалить хост «${host.name}»?`)) return
-    save({
-      ...store,
-      hosts: store.hosts.filter((h) => h.id !== host.id),
-      workspaces: store.workspaces?.map((w) => ({ ...w, hostIds: w.hostIds.filter((id) => id !== host.id) })),
-      // Its nodes on the map turn into "host deleted" labels rather than vanishing silently.
-      maps: store.maps.map((m) => ({ ...m, nodes: m.nodes.map((n) => (n.hostId === host.id ? { ...n, hostId: undefined, label: `${host.name} (удалён)` } : n)) }))
-    })
+  const deleteHost = async (host: Host) => {
+    if (!store || !(await ask(`Удалить хост «${host.name}»?`, DEL))) return
+    save(removeItems(store, { folders: new Set(), hosts: new Set([host.id]) }))
     setEditing(null)
   }
 
-  const deleteFolder = (folder: Folder) => {
-    if (!store || !confirm(`Удалить папку «${folder.name}»? Хосты и подпапки переедут на уровень выше.`)) return
-    save({
-      ...store,
-      folders: store.folders.filter((f) => f.id !== folder.id).map((f) => (f.parentId === folder.id ? { ...f, parentId: folder.parentId } : f)),
-      hosts: store.hosts.map((h) => (h.folderId === folder.id ? { ...h, folderId: folder.parentId } : h))
-    })
-    if (folderId === folder.id) setFolderId(folder.parentId)
+  /**
+   * A folder with something inside: delete it with everything in it (subfolders at any depth and
+   * their hosts), or only the folder, its contents moving one level up.
+   */
+  const deleteFolder = async (folder: Folder) => {
+    if (!store) return
+    const scope = deletionScope(store, [], [folder.id])
+    const subs = scope.folders.size - 1
+    const what = contentsText(subs, scope.hosts.size)
+    const how = what
+      ? await choose(`Папка «${folder.name}»: внутри ${what}.\n\nУдалить её вместе со всем содержимым или только саму папку (содержимое переедет на уровень выше)?`, [
+          { label: 'Только папку', value: 'lift' as const },
+          { label: 'Удалить всё', value: 'all' as const, destructive: true }
+        ])
+      : (await ask(`Удалить пустую папку «${folder.name}»?`, DEL)) && ('all' as const)
+    if (!how) return
+    if (how === 'all') save(removeItems(store, scope))
+    else
+      save({
+        ...store,
+        folders: store.folders.filter((f) => f.id !== folder.id).map((f) => (f.parentId === folder.id ? { ...f, parentId: folder.parentId } : f)),
+        hosts: store.hosts.map((h) => (h.folderId === folder.id ? { ...h, folderId: folder.parentId } : h))
+      })
+    if (folderId && (how === 'all' ? scope.folders.has(folderId) : folderId === folder.id)) setFolderId(folder.parentId)
     setEditing(null)
+  }
+
+  /** Everything picked with Ctrl + click; folders go with all they hold. */
+  const deleteItems = async (hostIds: string[], folderIds: string[]) => {
+    if (!store) return
+    const scope = deletionScope(store, hostIds, folderIds)
+    const inside = contentsText(scope.folders.size - folderIds.length, scope.hosts.size - hostIds.length)
+    const picked = [folderIds.length && plural(folderIds.length, 'папку', 'папки', 'папок'), hostIds.length && plural(hostIds.length, 'хост', 'хоста', 'хостов')].filter(Boolean).join(' и ')
+    if (!(await ask(`Удалить ${picked}?${inside ? `\nВместе с папками удалится всё, что в них лежит: ${inside}.` : ''}`, DEL))) return
+    save(removeItems(store, scope))
+    // Opened folder deleted: go up to the nearest one left.
+    let up = folderId
+    while (up && scope.folders.has(up)) up = store.folders.find((f) => f.id === up)?.parentId ?? null
+    if (up !== folderId) setFolderId(up)
   }
 
   const saveSettings = (settings: AppSettings) => {
@@ -377,7 +478,7 @@ export function App() {
     if (!store) return
     const sum = ownSummary(store, hostIds, folderIds)
     if (!sum.items) return setError({ title: 'Своих настроек нет', text: 'Выбранные хосты и папки уже берут всё из папок.' })
-    if (!confirm(`${sum.items} шт. забудут свои настройки (${describeOwn(sum.fields)}) и возьмут их из папок, в которых лежат. Продолжить?`)) return
+    if (!(await ask(`${sum.items} шт. забудут свои настройки (${describeOwn(sum.fields)}) и возьмут их из папок, в которых лежат. Продолжить?`, { ok: 'Продолжить' }))) return
     const r = inheritFromFolders(store, hostIds, folderIds)
     await persist(r.store, r.ops)
     window.api.monitorProbe(hostIds)
@@ -392,16 +493,16 @@ export function App() {
     setEditing(null)
   }
 
-  const deleteWorkspace = (w: Workspace) => {
-    if (!store || !confirm(`Удалить Workspace «${w.name}»? Хосты останутся на месте.`)) return
+  const deleteWorkspace = async (w: Workspace) => {
+    if (!store || !(await ask(`Удалить Workspace «${w.name}»? Хосты останутся на месте.`, DEL))) return
     save({ ...store, workspaces: (store.workspaces ?? []).filter((x) => x.id !== w.id) })
     setGroups((gs) => gs.map((g) => (g.workspaceId === w.id ? { ...g, workspaceId: undefined } : g)))
     setEditing(null)
   }
 
-  const openTools = (hostId: string) => {
+  const openTools = (hostId: string, address?: string) => {
     const h = store?.hosts.find((x) => x.id === hostId)
-    if (h) setToolsTarget({ address: h.address, tab: 'ping', at: Date.now() }), setScreen('tools')
+    if (h) setToolsTarget({ address: address ?? h.address, tab: 'ping', at: Date.now() }), setScreen('tools')
   }
   const run = (p: Promise<void>, title: string) => p.catch((e) => setError({ title, text: errorText(e) }))
 
@@ -418,6 +519,51 @@ export function App() {
 
   if (!store) return null
 
+  /** Opening a folder from anywhere (card, breadcrumb, sidebar) remembers where "Назад" returns to. */
+  const openFolder = (id: string | null) => {
+    if (id === folderId) return
+    setFolderHistory((h) => [...h.slice(-49), folderId])
+    setFolderId(id)
+  }
+  const folderExists = (id: string | null) => id === null || store.folders.some((f) => f.id === id)
+  const backTarget = (): { to: string | null; history: (string | null)[] } | undefined => {
+    const h = [...folderHistory]
+    while (h.length) {
+      const prev = h.pop()!
+      if (prev !== folderId && folderExists(prev)) return { to: prev, history: h }
+    }
+    // Nothing visited before (opened at start or history ran out): one level up.
+    if (folderId) return { to: store.folders.find((f) => f.id === folderId)?.parentId ?? null, history: [] }
+  }
+  const goBack = () => {
+    const b = backTarget()
+    if (b) setFolderHistory(b.history), setFolderId(b.to)
+  }
+
+  const folderMenu = (f: Folder): MenuItem[] => [
+    { label: 'Открыть', icon: 'folder', onSelect: () => (openFolder(f.id), setScreen('hosts')) },
+    { label: 'Подключиться ко всем', icon: 'play', onSelect: () => connectMany(hostsInSubtree(store, f.id).map((h) => h.id), f.name) },
+    { label: 'Новая подпапка', icon: 'folder', sep: true, onSelect: () => setEditing({ kind: 'folder', folder: null, parentId: f.id }) },
+    { label: 'Новый хост здесь', icon: 'plus', onSelect: () => setEditing({ kind: 'host', host: null, folderId: f.id }) },
+    { label: 'Изменить', icon: 'pencil', sep: true, onSelect: () => setEditing({ kind: 'folder', folder: f, parentId: f.parentId ?? null }) },
+    { label: 'Значок и цвет', icon: 'palette', onSelect: () => setEditing({ kind: 'appearance', folderIds: [f.id], hostIds: [] }) },
+    { label: 'Удалить папку', icon: 'trash', destructive: true, sep: true, onSelect: () => deleteFolder(f) }
+  ]
+  const workspaceMenu = (w: Workspace): MenuItem[] => [
+    { label: 'Открыть', icon: 'grid', onSelect: () => openWorkspace(w) },
+    { label: 'Изменить', icon: 'pencil', onSelect: () => setEditing({ kind: 'workspace', workspace: w }) },
+    { label: 'Удалить', icon: 'trash', destructive: true, sep: true, onSelect: () => deleteWorkspace(w) }
+  ]
+  const navMenu = (id: Screen): MenuItem[] => {
+    if (id === 'hosts') return [
+      { label: 'Новый хост', icon: 'plus', onSelect: () => setEditing({ kind: 'host', host: null, folderId: null }) },
+      { label: 'Новая папка', icon: 'folder', onSelect: () => setEditing({ kind: 'folder', folder: null, parentId: null }) }
+    ]
+    if (id === 'credentials') return [{ label: 'Новая учётка', icon: 'plus', onSelect: () => (setScreen('credentials'), setEditing({ kind: 'credential', credential: null })) }]
+    if (id === 'map') return [{ label: 'Открыть карту', icon: 'map', onSelect: () => setScreen('map') }]
+    return []
+  }
+
   const down = healthSummary(store.hosts.map((h) => h.id), status).down
   const nav: { id: Screen; label: string; icon: IconName; count?: number; alert?: number }[] = [
     { id: 'hosts', label: 'Хосты', icon: 'server', alert: down },
@@ -428,20 +574,23 @@ export function App() {
   ]
 
   return (
-    <div className="app">
+    <div className={`app ${rail ? 'is-rail' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar__brand drag">
           <Icon name="terminal" size={18} />
-          Pult
+          <span className="sidebar__brand-name">Pult</span>
+          <IconButton icon="sidebar" label={rail ? 'Развернуть левую панель' : 'Свернуть левую панель'} onClick={toggleRail} />
         </div>
         <nav className="sidebar__nav">
           {nav.map((n) => (
             <button
               key={n.id}
               className={['nav-item', screen === n.id && 'is-active'].filter(Boolean).join(' ')}
+              title={rail ? n.label : undefined}
+              onContextMenu={(e) => openContextMenu(e, navMenu(n.id))}
               onClick={() => {
                 setScreen(n.id)
-                if (n.id === 'hosts' && screen === 'hosts') setFolderId(null)
+                if (n.id === 'hosts' && screen === 'hosts') openFolder(null)
               }}
             >
               <Icon name={n.icon} size={18} />
@@ -452,14 +601,14 @@ export function App() {
         </nav>
 
         <div className="sidebar__section">
-          <h4>
+          <h4 onContextMenu={(e) => openContextMenu(e, [{ label: 'Новый Workspace', icon: 'plus', onSelect: () => setEditing({ kind: 'workspace', workspace: null }) }])}>
             Workspace
             <IconButton icon="plus" label="Новый Workspace" onClick={() => setEditing({ kind: 'workspace', workspace: null })} />
           </h4>
           {(store.workspaces ?? []).map((w) => {
             const open = groups.some((g) => g.workspaceId === w.id)
             return (
-              <div key={w.id} className="ws-row">
+              <div key={w.id} className="ws-row" onContextMenu={(e) => openContextMenu(e, workspaceMenu(w), w.name)}>
                 <button className={['nav-item nav-item--sm', open && screen === 'sessions' && groups.some((g) => g.workspaceId === w.id && groupKey(g.id) === activeTab) && 'is-active'].filter(Boolean).join(' ')} title={`Открыть все ${w.hostIds.length} одной вкладкой`} onClick={() => openWorkspace(w)}>
                   <Icon name="grid" size={15} />
                   <span>{w.name}</span>
@@ -474,14 +623,15 @@ export function App() {
 
         {store.folders.length > 0 && (
           <div className="sidebar__section">
-            <h4>Папки</h4>
+            <h4 onContextMenu={(e) => openContextMenu(e, [{ label: 'Новая папка', icon: 'folder', onSelect: () => setEditing({ kind: 'folder', folder: null, parentId: null }) }])}>Папки</h4>
             <FolderTree
               store={store}
               status={status}
               parentId={null}
               depth={0}
               current={screen === 'hosts' ? folderId : null}
-              onOpen={(id) => (setFolderId(id), setScreen('hosts'))}
+              onOpen={(id) => (openFolder(id), setScreen('hosts'))}
+              onMenu={(e, f) => openContextMenu(e, folderMenu(f), f.name)}
               expanded={treeOpen}
               onToggle={toggleTreeFolder}
               drop={(target) => dropTarget(target, moveItems, setDropOver)}
@@ -491,7 +641,7 @@ export function App() {
         )}
 
         <span className="sidebar__spacer" />
-        <button className={['nav-item', screen === 'settings' && 'is-active'].filter(Boolean).join(' ')} onClick={() => setScreen('settings')}>
+        <button className={['nav-item', screen === 'settings' && 'is-active'].filter(Boolean).join(' ')} title={rail ? 'Настройки' : undefined} onClick={() => setScreen('settings')}>
           <Icon name="gear" size={18} />
           <span>Настройки</span>
         </button>
@@ -499,8 +649,8 @@ export function App() {
 
       <main className="content">
         {error && (
-          <div className="toast-area">
-            <Banner title={error.title} onClose={() => setError(null)}>{error.text}</Banner>
+          <div className="toast-area" onMouseEnter={() => setErrorHeld(true)} onMouseLeave={() => setErrorHeld(false)}>
+            <Banner title={error.title} onClose={() => (setError(null), setErrorHeld(false))}>{error.text}</Banner>
           </div>
         )}
 
@@ -509,17 +659,20 @@ export function App() {
             store={store}
             status={status}
             folderId={folderId}
-            onOpenFolder={setFolderId}
+            onOpenFolder={openFolder}
+            onBack={backTarget() ? goBack : undefined}
             openCount={openCount}
             connecting={connecting}
-            onConnect={connect}
+            onConnect={(id, address) => void connect(id, undefined, address)}
             onConnectFolder={(id) => connectMany(hostsInSubtree(store, id).map((h) => h.id), store.folders.find((f) => f.id === id)?.name ?? 'Папка')}
             onEditHost={(host) => setEditing({ kind: 'host', host })}
+            onNewHost={(fid) => setEditing({ kind: 'host', host: null, folderId: fid })}
             onEditFolder={(folder, parentId) => setEditing({ kind: 'folder', folder, parentId: parentId ?? folderId })}
             onDeleteHost={deleteHost}
             onDeleteFolder={deleteFolder}
-            onBrowser={(id) => run(window.api.openInBrowser(id), 'Не удалось открыть браузер')}
-            onWinbox={(id) => run(window.api.openWinbox(id), 'Не удалось запустить WinBox')}
+            onDeleteItems={deleteItems}
+            onBrowser={(id, address) => run(window.api.openInBrowser(id, address), 'Не удалось открыть браузер')}
+            onWinbox={(id, address) => run(window.api.openWinbox(id, address), 'Не удалось запустить WinBox')}
             onTools={openTools}
             onConnectMany={(ids) => connectMany(ids, `Выбранные: ${ids.length}`)}
             onAppearance={(folderIds, hostIds) => setEditing({ kind: 'appearance', folderIds, hostIds })}
@@ -532,6 +685,7 @@ export function App() {
         {/* Kept mounted while on other screens so terminals keep their state. */}
         <div className="screen-host" style={{ display: screen === 'sessions' ? 'contents' : 'none' }}>
           <SessionsScreen
+            shown={screen === 'sessions'}
             sessions={attached}
             groups={groups}
             tabs={tabs}
@@ -547,13 +701,14 @@ export function App() {
             group={group}
             onToggleGroup={(id) => setGroup((g) => (g.has(id) ? without(g, id) : new Set(g).add(id)))}
             onGroupAll={(ids, on) => setGroup((g) => (on ? new Set([...g, ...ids]) : new Set([...g].filter((id) => !ids.includes(id)))))}
-            syncInput={syncInput}
-            onSyncInput={setSyncInput}
+            broadcast={broadcast}
+            onBroadcast={setBroadcast}
             onInput={onInput}
-            onBroadcast={(cmd, targets) => window.api.broadcast(targets, cmd + '\r')}
             onPopout={popout}
+            onReconnect={reconnect}
             onClose={closeSession}
             onCloseTab={closeTab}
+            onCloseDead={(ids) => ids.forEach(closeSession)}
             onSaveWorkspace={(groupId) => {
               const g = groups.find((x) => x.id === groupId)
               const hostIds = [...new Set(sessions.filter((s) => s.groupId === groupId).map((s) => s.hostId))]
@@ -569,14 +724,15 @@ export function App() {
             status={status}
             openCount={openCount}
             onSaveMaps={saveMaps}
-            onConnect={connect}
+            onConnect={(id, address) => void connect(id, undefined, address)}
             onConnectMany={(ids, title) => connectMany(ids, title ?? 'Карта')}
-            onBrowser={(id) => run(window.api.openInBrowser(id), 'Не удалось открыть браузер')}
-            onWinbox={(id) => run(window.api.openWinbox(id), 'Не удалось запустить WinBox')}
+            onBrowser={(id, address) => run(window.api.openInBrowser(id, address), 'Не удалось открыть браузер')}
+            onWinbox={(id, address) => run(window.api.openWinbox(id, address), 'Не удалось запустить WinBox')}
             onTools={openTools}
             onEditHost={(id) => setEditing({ kind: 'host', host: store.hosts.find((h) => h.id === id) ?? null })}
             onAppearance={(hostIds) => setEditing({ kind: 'appearance', folderIds: [], hostIds })}
             animations={store.settings?.animations ?? true}
+            onError={(title, text) => setError({ title, text })}
           />
         )}
 
@@ -591,8 +747,10 @@ export function App() {
         {screen === 'settings' && <SettingsScreen settings={store.settings ?? {}} credentials={store.credentials} folders={store.folders} onChange={saveSettings} onOpenCredentials={() => setScreen('credentials')} onImported={(s) => (setStore(s), applyTheme(s.settings))} />}
       </main>
 
+      {designOf(store.settings) === 'ferrum' && <StatusBar store={store} sessions={nav[1].count ?? 0} down={down} broadcast={broadcast ? [...group].filter((id) => onScreen.has(id)).length : 0} />}
+
       {editing?.kind === 'host' && (
-        <HostSheet store={store} host={editing.host} defaultFolderId={folderId} onCancel={() => setEditing(null)} onSave={saveHost} onDelete={deleteHost} />
+        <HostSheet store={store} host={editing.host} defaultFolderId={editing.folderId !== undefined ? editing.folderId : folderId} onCancel={() => setEditing(null)} onSave={saveHost} onDelete={deleteHost} />
       )}
       {editing?.kind === 'folder' && (
         <FolderSheet store={store} folder={editing.folder} defaultParentId={editing.parentId} onCancel={() => setEditing(null)} onSave={saveFolder} onDelete={deleteFolder} />
@@ -626,6 +784,8 @@ export function App() {
           onDelete={deleteCredential}
         />
       )}
+      <ConfirmHost />
+      <ContextMenuHost />
       {keyPrompts[0] && (
         <HostKeySheet prompt={keyPrompts[0]} queued={keyPrompts.slice(1).filter((p) => !p.previous).length} onAnswer={answerKey} onTrustAllNew={trustAllNew} />
       )}
@@ -634,6 +794,23 @@ export function App() {
 }
 
 const TREE_OPEN_KEY = 'folderTree.open'
+const RAIL_KEY = 'sidebar.rail'
+
+function loadFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+
+function saveFlag(key: string, on: boolean): void {
+  try {
+    localStorage.setItem(key, on ? '1' : '0')
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 /** Expanded sidebar folders, kept across restarts (Electron keeps localStorage in userData). New folders start collapsed. */
 function loadTreeOpen(): Set<string> {
@@ -654,13 +831,14 @@ function saveTreeOpen(s: Set<string>): void {
 }
 
 /** Sidebar tree: any depth, collapsible, with a red dot where something inside is down. */
-function FolderTree({ store, status, parentId, depth, current, onOpen, expanded, onToggle, drop, over }: {
+function FolderTree({ store, status, parentId, depth, current, onOpen, onMenu, expanded, onToggle, drop, over }: {
   store: StoreSnapshot
   status: Map<string, HostStatus>
   parentId: string | null
   depth: number
   current: string | null
   onOpen(id: string): void
+  onMenu(e: ReactMouseEvent, folder: Folder): void
   expanded: Set<string>
   onToggle(id: string): void
   /** Drop handlers for a folder: dragged hosts and folders move into it. */
@@ -680,6 +858,7 @@ function FolderTree({ store, status, parentId, depth, current, onOpen, expanded,
               className={['nav-item nav-item--sm tree-item', current === f.id && 'is-active', over === f.id && 'is-drop-target'].filter(Boolean).join(' ')}
               style={{ paddingLeft: 8 + depth * 14 }}
               onClick={() => onOpen(f.id)}
+              onContextMenu={(e) => onMenu(e, f)}
               {...drop(f.id)}
             >
               <span
@@ -694,7 +873,7 @@ function FolderTree({ store, status, parentId, depth, current, onOpen, expanded,
               <span>{f.name}</span>
               {s.down > 0 ? <HealthDot health="down" title={`${s.down} недоступно`} /> : <span className="nav-item__count">{s.up + s.down + s.unknown || ''}</span>}
             </button>
-            {hasKids && open && <FolderTree store={store} status={status} parentId={f.id} depth={depth + 1} current={current} onOpen={onOpen} expanded={expanded} onToggle={onToggle} drop={drop} over={over} />}
+            {hasKids && open && <FolderTree store={store} status={status} parentId={f.id} depth={depth + 1} current={current} onOpen={onOpen} onMenu={onMenu} expanded={expanded} onToggle={onToggle} drop={drop} over={over} />}
           </div>
         )
       })}
@@ -706,4 +885,25 @@ function without<T>(s: Set<T>, v: T): Set<T> {
   const n = new Set(s)
   n.delete(v)
   return n
+}
+
+/** Ferrum's bottom line: what is open, what is broadcast, what monitoring sees, and that the app stays in the LAN. */
+function StatusBar({ store, sessions, down, broadcast }: { store: StoreSnapshot; sessions: number; down: number; broadcast: number }) {
+  const hosts = store.hosts.length
+  return (
+    <footer className="statusbar" aria-label="Состояние">
+      <span className={`statusbar__item ${sessions ? 'is-on' : ''}`}>
+        <span className={`ds-dot ds-dot--${sessions ? 'online' : 'offline'}`} />
+        {plural(sessions, 'сессия', 'сессии', 'сессий')}
+      </span>
+      <span className={`statusbar__item ${broadcast ? 'is-warn' : ''}`}>
+        broadcast: {broadcast ? `вкл · ${plural(broadcast, 'сессия', 'сессии', 'сессий')}` : 'выкл'}
+      </span>
+      <span className="statusbar__item">мониторинг: {plural(hosts, 'хост', 'хоста', 'хостов')}</span>
+      {down > 0 && <span className="statusbar__item is-bad">{down} недоступно</span>}
+      <span className="statusbar__spacer" />
+      <span className="statusbar__item">LAN · без интернета</span>
+      <span className="statusbar__item is-accent">{themeById(store.settings?.theme, 'ferrum').name}</span>
+    </footer>
+  )
 }

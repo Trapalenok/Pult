@@ -87,3 +87,14 @@ assert.equal(hr.plan.passwordsLookEncrypted, true)
 
 assert.throws(() => readForeign(Buffer.from('garbage'), 'enc.sqlite', async () => SQL), /SQLCipher/)
 console.log('foreign import: ok')
+
+// One device with several addresses in one cell: the first is the main one, the rest go to addresses.
+{
+  const mf = await readForeign(Buffer.from('name;ip\r\nsw-multi;"10.9.0.1, 10.9.1.1 10.9.2.1, 10.9.3.1"\r\nsw-one;10.9.0.5\r\n'), 'multi.csv', async () => SQL)
+  const mt = previewTables(mf).tables[0]
+  const mr = buildImport(empty, mf, { table: mt.name, mapping: { name: 'name', address: 'ip' }, targetFolderId: null, duplicates: 'skip' }, id)
+  const multi = mr.store.hosts.find((x) => x.name === 'sw-multi')
+  assert.equal(multi.address, '10.9.0.1')
+  assert.deepEqual(multi.addresses, ['10.9.1.1', '10.9.2.1'], 'at most two extra addresses')
+  assert.equal(mr.store.hosts.find((x) => x.name === 'sw-one').addresses, undefined)
+}

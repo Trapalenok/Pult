@@ -21,6 +21,20 @@ export function ping(address: string, timeoutMs = 1000): Promise<number | null> 
   })
 }
 
+/**
+ * A host counts as down only after several echoes in a row are lost. One lost echo is common on
+ * a quiet LAN: with a 1-2 minute interval the ARP entries along the way have expired, and a switch
+ * drops the packet that triggered ARP resolution; its CPU also rate-limits ICMP, and dozens of
+ * echoes go out at once. The later tries wait longer, for a busy control plane.
+ */
+export async function pingRetry(address: string, tries = 3): Promise<number | null> {
+  for (let i = 0; i < tries; i++) {
+    const rtt = await ping(address, i === 0 ? 1000 : 2000)
+    if (rtt !== null) return rtt
+  }
+  return null
+}
+
 export function parseRtt(out: string): number | null {
   // "Destination host unreachable" replies come back without TTL: that is not alive.
   if (!/ttl=/i.test(out)) return null
@@ -31,6 +45,11 @@ export function parseRtt(out: string): number | null {
   const v = Number(m[2].replace(',', '.'))
   // "<1ms": under a millisecond.
   return m[1] === '<' ? v / 2 : v
+}
+
+/** tcpPing with one more try before giving up. */
+export async function tcpPingRetry(open: TcpOpen, address: string, port: number): Promise<number | null> {
+  return (await tcpPing(open, address, port)) ?? tcpPing(open, address, port, 5000)
 }
 
 /** Opens address:port from the jump host / proxy; rejects when it can't. */

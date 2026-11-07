@@ -1,0 +1,338 @@
+/*
+ * Ferrum: the strict, engineering design system (Figma uUpD1Io4DIzE17SoXgCnsb). Settings → Оформление.
+ * Everything here is scoped to :root[data-ds='ferrum'] (set by themes.ts), so Shellwise is untouched.
+ * Colours come from ferrum.tokens.json through the same --sw-* names as Shellwise; this file swaps
+ * the rest of the foundations (type, radii, sizes, elevation, motion) and reshapes the components:
+ * flat surfaces, 1px rules instead of shadows, radius 0–4px, square status marks, mono labels,
+ * hosts as table rows, a status bar at the bottom.
+ */
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+/* ── Foundations ──────────────────────────────────────────── */
+:root[data-ds='ferrum'] {
+  --font-ui: 'IBM Plex Sans', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, 'DejaVu Sans Mono', monospace;
+
+  --text-large-title: 600 22px/28px var(--font-display);  /* Text/Display */
+  --text-title: 600 18px/24px var(--font-display);        /* Text/Title */
+  --text-headline: 600 14px/20px var(--font-ui);          /* Text/Heading */
+  --text-body: 400 13px/18px var(--font-ui);              /* Text/Body */
+  --text-body-strong: 500 13px/18px var(--font-ui);       /* Text/Body Strong */
+  --text-callout: 500 12px/16px var(--font-ui);           /* Text/Label */
+  --text-subhead: 400 12px/16px var(--font-ui);
+  --text-footnote: 400 11px/14px var(--font-ui);          /* Text/Caption */
+  --text-caption: 500 10px/12px var(--font-mono);         /* Text/Overline, caps +0.8 */
+  --text-mono: 400 13px/18px var(--font-mono);            /* Text/Mono */
+  --text-mono-sm: 400 11px/14px var(--font-mono);         /* Text/Mono Small */
+  --text-mono-strong: 500 12px/16px var(--font-mono);     /* Text/Mono Strong */
+  --tracking-display: -0.2px;
+  --tracking-title: -0.1px;
+  --tracking-caption: 0.8px;
+
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+
+  --control-sm: 24px;
+  --control-md: 28px;
+  --control-lg: 32px;
+  --titlebar-h: 36px;
+  --sidebar-w: 232px;
+  --icon-tile: 28px;
+  --statusbar-h: 22px;
+
+  /* No elevation by shadow: depth is the background step plus a 1px rule. Only overlays cast one. */
+  --shadow-card: 0 0 0 0 transparent;
+  --shadow-raised: 0 0 0 0 transparent;
+  --shadow-sheet: 0 12px 32px rgb(0 0 0 / 0.45);
+  --focus-ring: 0 0 0 2px color-mix(in srgb, var(--sw-border-focus) 45%, transparent);
+
+  --dur-sheet: 160ms;
+  --ease-sheet: var(--ease-out);
+}
+
+:root[data-ds='ferrum'] body { font-feature-settings: normal; font-variant-numeric: tabular-nums; }
+:root[data-ds='ferrum'] ::-webkit-scrollbar { width: 8px; height: 8px; }
+:root[data-ds='ferrum'] ::-webkit-scrollbar-thumb { border-radius: 0; border-width: 2px; }
+/* Square ends and mitred corners on every line icon. */
+:root[data-ds='ferrum'] svg[stroke] { stroke-linecap: square; stroke-linejoin: miter; }
+:root[data-ds='ferrum'] .mono { font-family: var(--font-mono); }
+
+/* Overline: mono caps with a // prefix, as in the Figma section headers. */
+:root[data-ds='ferrum'] :is(.ds-group__header, .sidebar__section h4, .cards-section h2)::before { content: '//\00a0'; }
+
+/* ── Button ───────────────────────────────────────────────── */
+:root[data-ds='ferrum'] .ds-btn { padding: 0 var(--space-4); border-radius: var(--radius-xs); }
+:root[data-ds='ferrum'] .ds-btn:active:not(:disabled) { transform: none; filter: brightness(0.92); }
+:root[data-ds='ferrum'] .ds-btn--sm { padding: 0 var(--space-3); border-radius: var(--radius-xs); }
+:root[data-ds='ferrum'] .ds-btn--lg { padding: 0 var(--space-5); border-radius: var(--radius-xs); font: var(--text-body-strong); }
+:root[data-ds='ferrum'] .ds-btn--icon { padding: 0; }
+:root[data-ds='ferrum'] .ds-btn--filled { box-shadow: none; }
+/* Tinted = Secondary in Ferrum: raised surface with a rule, text in the primary colour. */
+:root[data-ds='ferrum'] .ds-btn--tinted { background: var(--bg-elevated); color: var(--label-1); box-shadow: inset 0 0 0 1px var(--separator-opaque); }
+:root[data-ds='ferrum'] .ds-btn--tinted:hover:not(:disabled) { background: var(--bg-elevated-2); }
+:root[data-ds='ferrum'] .ds-btn--destructive { background: transparent; box-shadow: inset 0 0 0 1px var(--red); }
+:root[data-ds='ferrum'] .ds-btn--destructive:hover:not(:disabled) { background: var(--sw-status-offline-soft); }
+:root[data-ds='ferrum'] .ds-iconbtn { border-radius: var(--radius-xs); }
+:root[data-ds='ferrum'] .ds-iconbtn.is-active { box-shadow: inset 0 0 0 1px var(--tint); }
+
+/* ── Badge, tile, status marks ────────────────────────────── */
+:root[data-ds='ferrum'] .ds-badge {
+  height: 18px; padding: 0 var(--space-half); border-radius: var(--radius-xs);
+  font: var(--text-caption); letter-spacing: 0.4px;
+  background: color-mix(in srgb, var(--c) 12%, var(--bg-elevated)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent);
+}
+/* Tile: an outlined square with the glyph in colour instead of a soft wash. */
+:root[data-ds='ferrum'] .ds-tile { background: color-mix(in srgb, var(--c) 8%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); font: 500 12px/1 var(--font-mono); }
+:root[data-ds='ferrum'] .ds-tile--sm { width: 22px; height: 22px; border-radius: var(--radius-xs); font-size: 10px; }
+:root[data-ds='ferrum'] .ds-tile--sm svg { width: 14px; height: 14px; }
+:root[data-ds='ferrum'] .ds-tile--md { border-radius: var(--radius-xs); }
+:root[data-ds='ferrum'] .ds-tile--md svg { width: 16px; height: 16px; }
+:root[data-ds='ferrum'] .ds-tile--lg { width: 44px; height: 44px; border-radius: var(--radius-lg); }
+:root[data-ds='ferrum'] :is(.ds-dot, .ds-health, .tab__dot) { width: 8px; height: 8px; border-radius: 0; }
+:root[data-ds='ferrum'] .ds-dot--online, :root[data-ds='ferrum'] .ds-health--up { box-shadow: none; }
+:root[data-ds='ferrum'] .ds-dot--connecting { background: transparent; box-shadow: inset 0 0 0 1px var(--tint); animation: fe-blink 1s steps(2) infinite; }
+:root[data-ds='ferrum'] .ds-health--down { box-shadow: 0 0 0 2px var(--sw-status-offline-soft); animation: none; }
+:root[data-ds='ferrum'] .ds-health--unknown { background: transparent; box-shadow: inset 0 0 0 1px var(--separator-opaque); }
+@keyframes fe-blink { to { opacity: 0.25; } }
+:root[data-ds='ferrum'] .ds-spark rect { fill: var(--label-3); }
+:root[data-ds='ferrum'] .ds-spark rect.is-lost { fill: var(--red); }
+
+/* ── Grouped list = a ruled form ──────────────────────────── */
+:root[data-ds='ferrum'] .ds-group { margin-bottom: var(--space-7); }
+:root[data-ds='ferrum'] .ds-group__header { margin: 0 0 var(--space-3); color: var(--label-3); }
+:root[data-ds='ferrum'] .ds-group__footer { margin: var(--space-3) 0 0; font: var(--text-subhead); }
+:root[data-ds='ferrum'] .ds-group__body { border-radius: var(--radius-xs); box-shadow: 0 0 0 1px var(--separator); }
+:root[data-ds='ferrum'] .ds-row { min-height: 38px; gap: var(--space-4); padding: var(--space-1) var(--space-4); }
+:root[data-ds='ferrum'] .ds-row + .ds-row::before { left: 0; }
+:root[data-ds='ferrum'] .ds-row:has(.ds-tile) + .ds-row::before { left: 0; }
+:root[data-ds='ferrum'] .ds-row__label { font: var(--text-callout); color: var(--label-2); }
+:root[data-ds='ferrum'] .ds-row__control { font: var(--text-body); }
+:root[data-ds='ferrum'] .ds-row .ds-tile--sm { box-shadow: none; background: transparent; width: 16px; }
+:root[data-ds='ferrum'] .ds-field { font-family: var(--font-mono); }
+:root[data-ds='ferrum'] .ds-field:focus { color: var(--label-1); }
+
+/* ── Toggle, segmented, search ────────────────────────────── */
+:root[data-ds='ferrum'] .ds-toggle { width: 28px; height: 16px; border-radius: var(--radius-xs); background: var(--bg-elevated-2); box-shadow: inset 0 0 0 1px var(--separator-opaque); }
+:root[data-ds='ferrum'] .ds-toggle.is-on { background: var(--tint); box-shadow: none; }
+:root[data-ds='ferrum'] .ds-toggle__knob { top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 1px; background: var(--label-3); box-shadow: none; }
+:root[data-ds='ferrum'] .ds-toggle.is-on .ds-toggle__knob { transform: translateX(12px); background: var(--on-tint); }
+:root[data-ds='ferrum'] .ds-seg { padding: 0; gap: 0; border-radius: var(--radius-xs); box-shadow: inset 0 0 0 1px var(--separator-opaque); overflow: hidden; }
+:root[data-ds='ferrum'] .ds-seg__item { border-radius: 0; padding: 0 var(--space-4); font: var(--text-callout); }
+:root[data-ds='ferrum'] .ds-seg__item + .ds-seg__item { box-shadow: inset 1px 0 0 var(--separator-opaque); }
+:root[data-ds='ferrum'] .ds-seg--md .ds-seg__item { height: var(--control-md); }
+:root[data-ds='ferrum'] .ds-seg--sm .ds-seg__item { height: var(--control-sm); padding: 0 var(--space-3); }
+:root[data-ds='ferrum'] .ds-seg__item.is-selected { background: var(--tint-soft); color: var(--tint-text); box-shadow: none; }
+:root[data-ds='ferrum'] .ds-seg__item.is-selected + .ds-seg__item { box-shadow: inset 1px 0 0 var(--separator-opaque); }
+:root[data-ds='ferrum'] .ds-search { border-radius: var(--radius-xs); box-shadow: inset 0 0 0 1px var(--separator-opaque); }
+:root[data-ds='ferrum'] .ds-search:focus-within { box-shadow: inset 0 0 0 1px var(--border-focus), var(--focus-ring); }
+:root[data-ds='ferrum'] .ds-search button { border-radius: 0; }
+
+/* ── Sheet, menu, banner ──────────────────────────────────── */
+:root[data-ds='ferrum'] .ds-sheet { border-radius: var(--radius-lg); box-shadow: var(--shadow-sheet), 0 0 0 1px var(--separator-opaque); }
+:root[data-ds='ferrum'] .ds-sheet__bar { padding: var(--space-3) var(--space-4); background: var(--bg-surface); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+:root[data-ds='ferrum'] .ds-sheet__body { padding: var(--space-5) var(--space-5) var(--space-3); }
+@keyframes fe-sheet-in { from { transform: translateY(8px); opacity: 0; } }
+:root[data-ds='ferrum'] .ds-sheet { animation-name: fe-sheet-in; }
+:root[data-ds='ferrum'] .ds-menu__list { border-radius: var(--radius-xs); padding: var(--space-1) 0; box-shadow: var(--shadow-sheet), 0 0 0 1px var(--separator-opaque); }
+:root[data-ds='ferrum'] .ds-menu__item { height: 28px; border-radius: 0; padding: 0 var(--space-4); font: var(--text-body); }
+:root[data-ds='ferrum'] .ds-banner { border-radius: var(--radius-xs); border-width: 1px 1px 1px 3px; border-color: var(--c); }
+:root[data-ds='ferrum'] .ds-empty h3 { font: var(--text-title); }
+
+/* ── App frame: sidebar ───────────────────────────────────── */
+:root[data-ds='ferrum'] .app { grid-template-rows: minmax(0, 1fr) var(--statusbar-h); }
+:root[data-ds='ferrum'] .sidebar { padding: 0 0 var(--space-3); gap: 0; }
+:root[data-ds='ferrum'] .sidebar__brand {
+  gap: var(--space-3); padding: 0 var(--space-4); margin-bottom: var(--space-2);
+  font: 500 12px/16px var(--font-mono); letter-spacing: 1px; text-transform: uppercase;
+  border-bottom: 1px solid var(--separator);
+}
+:root[data-ds='ferrum'] .sidebar__brand > svg { padding: 2px; width: 20px; height: 20px; border-radius: var(--radius-xs); background: var(--tint); color: var(--on-tint); }
+:root[data-ds='ferrum'] .sidebar__nav { gap: 0; }
+:root[data-ds='ferrum'] .sidebar__section { margin-top: var(--space-5); }
+:root[data-ds='ferrum'] .sidebar__section h4 { justify-content: flex-start; margin: 0 var(--space-4) var(--space-2); }
+:root[data-ds='ferrum'] .sidebar__section h4 .ds-iconbtn { margin-left: auto; }
+:root[data-ds='ferrum'] .sidebar__hint { margin: 0 var(--space-4); }
+:root[data-ds='ferrum'] .nav-item { height: 28px; padding: 0 var(--space-4); border-radius: 0; font: var(--text-callout); }
+:root[data-ds='ferrum'] .nav-item svg { width: 16px; height: 16px; }
+:root[data-ds='ferrum'] .nav-item--sm { height: 26px; }
+/* Selection = a 2px accent rule on the left edge. */
+:root[data-ds='ferrum'] .nav-item.is-active { box-shadow: inset 2px 0 0 var(--tint); }
+:root[data-ds='ferrum'] .nav-item__count { font: var(--text-mono-sm); color: var(--label-3); }
+:root[data-ds='ferrum'] .nav-item .ds-badge { height: 16px; padding: 0 4px; }
+:root[data-ds='ferrum'] .nav-item__swatch { border-radius: 0; }
+:root[data-ds='ferrum'] .ws-row { gap: 0; padding-right: var(--space-2); }
+:root[data-ds='ferrum'] .app.is-rail .sidebar { padding-left: 0; padding-right: 0; }
+:root[data-ds='ferrum'] .app.is-rail .nav-item { padding: 0; height: 34px; }
+:root[data-ds='ferrum'] .sidebar__brand .ds-iconbtn { width: 24px; height: 24px; }
+
+/* ── Status bar (Ferrum only, rendered by App) ────────────── */
+.statusbar { display: none; }
+:root[data-ds='ferrum'] .statusbar {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-5); min-width: 0; padding: 0 var(--space-4);
+  background: var(--bg-sidebar); border-top: 1px solid var(--separator); font: var(--text-mono-sm); color: var(--label-3); white-space: nowrap;
+}
+.statusbar__item { display: inline-flex; align-items: center; gap: var(--space-half); }
+.statusbar__item.is-on { color: var(--label-2); }
+.statusbar__item.is-bad { color: var(--red); }
+.statusbar__item.is-warn { color: var(--orange); }
+.statusbar__item.is-accent { color: var(--tint-text); }
+.statusbar__spacer { flex: 1; }
+
+/* ── Screens ──────────────────────────────────────────────── */
+:root[data-ds='ferrum'] .screen__bar { gap: var(--space-2); padding-left: var(--space-3); }
+:root[data-ds='ferrum'] .screen__scroll { padding: var(--space-5) var(--space-6) var(--space-8); }
+:root[data-ds='ferrum'] .screen__head { margin-bottom: var(--space-5); }
+:root[data-ds='ferrum'] .screen__sub { font: var(--text-mono-sm); }
+:root[data-ds='ferrum'] .crumbs button { height: 24px; font: var(--text-mono-sm); color: var(--label-2); }
+:root[data-ds='ferrum'] .crumbs button.is-current { color: var(--label-1); font-weight: 500; }
+
+/* Section header: // NAME ───────── */
+:root[data-ds='ferrum'] .cards-section { margin-bottom: var(--space-6); }
+:root[data-ds='ferrum'] .cards-section h2 { display: flex; align-items: center; margin: 0 0 var(--space-3); color: var(--label-3); white-space: pre; }
+:root[data-ds='ferrum'] .cards-section h2::after { content: ''; flex: 1; margin-left: var(--space-4); border-top: 1px solid var(--separator); }
+
+/* Cards: flat, ruled, square. */
+:root[data-ds='ferrum'] .cards { gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+:root[data-ds='ferrum'] .card {
+  gap: var(--space-4); min-height: 48px; padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-xs); box-shadow: inset 0 0 0 1px var(--separator);
+}
+:root[data-ds='ferrum'] .card:hover { background: var(--bg-elevated-2); box-shadow: inset 0 0 0 1px var(--separator-opaque); }
+:root[data-ds='ferrum'] .card:active { transform: none; }
+:root[data-ds='ferrum'] .card__title { font: var(--text-body-strong); }
+:root[data-ds='ferrum'] .card__sub { margin-top: 2px; font: var(--text-mono-sm); color: var(--label-3); }
+:root[data-ds='ferrum'] .card__badges { margin-top: var(--space-1); }
+:root[data-ds='ferrum'] .card.is-picked, :root[data-ds='ferrum'] .card.is-drop-target { background: var(--tint-soft); box-shadow: inset 0 0 0 1px var(--tint); }
+:root[data-ds='ferrum'] .card__icon .ds-health { right: -2px; bottom: -2px; box-shadow: 0 0 0 2px var(--bg-elevated); }
+:root[data-ds='ferrum'] .card:hover .card__icon .ds-health { box-shadow: 0 0 0 2px var(--bg-elevated-2); }
+:root[data-ds='ferrum'] .card__icon .ds-health--down { box-shadow: 0 0 0 2px var(--bg-elevated); }
+:root[data-ds='ferrum'] .metric { font: var(--text-mono-sm); }
+:root[data-ds='ferrum'] .pick-bar { border-radius: var(--radius-xs); box-shadow: var(--shadow-sheet), 0 0 0 1px var(--separator-opaque); }
+
+/* Hosts: a table. Each card is a 36px row; the text block becomes the name | address | state columns. */
+.cards__head { display: none; }
+:root[data-ds='ferrum'] .cards--hosts {
+  display: flex; flex-direction: column; gap: 0; border-radius: var(--radius-xs); overflow: hidden;
+  background: var(--bg-elevated); box-shadow: inset 0 0 0 1px var(--separator);
+}
+:root[data-ds='ferrum'] .cards--hosts > .card {
+  min-height: 36px; padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4); gap: var(--space-4);
+  border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 var(--separator);
+}
+:root[data-ds='ferrum'] .cards--hosts > .card:last-child { box-shadow: none; }
+:root[data-ds='ferrum'] .cards--hosts > .card:hover { background: var(--bg-elevated-2); }
+:root[data-ds='ferrum'] .cards--hosts > .card.is-focused:not(.is-picked) { background: var(--bg-selected); box-shadow: inset 0 -1px 0 var(--separator); }
+:root[data-ds='ferrum'] .cards--hosts > .card.is-picked { background: var(--bg-selected); box-shadow: inset 2px 0 0 var(--tint), inset 0 -1px 0 var(--separator); }
+:root[data-ds='ferrum'] .cards--hosts .ds-tile { box-shadow: none; background: transparent; }
+:root[data-ds='ferrum'] .cards--hosts :is(.card__text, .cards__cols) {
+  display: grid; grid-template-columns: minmax(150px, 1.1fr) minmax(170px, 1fr) minmax(0, 2.2fr); column-gap: var(--space-5); align-items: center;
+}
+:root[data-ds='ferrum'] .cards--hosts .card__title { font: var(--text-mono-strong); font-size: 13px; }
+:root[data-ds='ferrum'] .cards--hosts .card__sub { margin: 0; font: var(--text-mono-sm); color: var(--label-2); }
+:root[data-ds='ferrum'] .cards--hosts .card__metrics { flex-wrap: wrap; margin: 0; min-height: 0; column-gap: var(--space-4); row-gap: 2px; }
+:root[data-ds='ferrum'] .cards--hosts .card__path { grid-column: 1 / -1; margin-top: 2px; }
+:root[data-ds='ferrum'] .cards--hosts .cards__head {
+  display: flex; align-items: center; gap: var(--space-4); height: 28px; padding: 0 var(--space-2) 0 var(--space-4);
+  background: var(--bg-surface); box-shadow: inset 0 -1px 0 var(--separator);
+  font: var(--text-caption); letter-spacing: var(--tracking-caption); text-transform: uppercase; color: var(--label-3);
+}
+:root[data-ds='ferrum'] .cards__head-icon { width: calc(var(--icon-tile) + 20px); flex: none; }
+/* In a row the health mark leads, like the status column of a table. */
+:root[data-ds='ferrum'] .cards--hosts .card__icon { display: flex; flex-direction: row-reverse; align-items: center; gap: var(--space-3); }
+:root[data-ds='ferrum'] .cards--hosts .card__icon .ds-health { position: static; box-shadow: none; }
+:root[data-ds='ferrum'] .cards--hosts .card__icon .ds-health--down { box-shadow: 0 0 0 2px var(--sw-status-offline-soft); }
+:root[data-ds='ferrum'] .cards__head .cards__cols { flex: 1; min-width: 0; }
+:root[data-ds='ferrum'] .cards__head-menu { width: var(--control-sm); flex: none; }
+
+/* ── Tabs and terminal panes ──────────────────────────────── */
+:root[data-ds='ferrum'] .tabstrip { gap: 0; align-self: stretch; align-items: stretch; }
+:root[data-ds='ferrum'] .tab {
+  height: auto; min-height: 30px; padding: 0 var(--space-2) 0 var(--space-4); border-radius: 0;
+  box-shadow: inset -1px 0 0 var(--separator); font: var(--text-mono-strong);
+}
+:root[data-ds='ferrum'] .tab:hover { background: var(--bg-elevated-2); }
+:root[data-ds='ferrum'] .tab.is-active { background: var(--bg-surface); box-shadow: inset 0 2px 0 var(--tint), inset -1px 0 0 var(--separator); }
+:root[data-ds='ferrum'] .tab__dot { box-shadow: none; }
+:root[data-ds='ferrum'] .tab__count { border-radius: var(--radius-xs); font: var(--text-mono-sm); }
+:root[data-ds='ferrum'] .tab__close { border-radius: var(--radius-xs); }
+:root[data-ds='ferrum'] .workspace { gap: 1px; padding: 0; background: var(--separator); }
+:root[data-ds='ferrum'] .pane { border-radius: 0; box-shadow: none; outline-offset: -1px; }
+:root[data-ds='ferrum'] .pane.is-focused { box-shadow: none; outline: 1px solid var(--border-focus); }
+:root[data-ds='ferrum'] .pane.in-group { box-shadow: none; outline: 1px solid color-mix(in srgb, var(--orange) 70%, transparent); }
+:root[data-ds='ferrum'] .pane.is-broadcasting { box-shadow: none; outline: 2px solid var(--orange); outline-offset: -2px; }
+:root[data-ds='ferrum'] .pane__bar { height: 28px; gap: var(--space-3); padding: 0 var(--space-1) 0 var(--space-3); }
+:root[data-ds='ferrum'] .pane__title { font: var(--text-mono-strong); }
+:root[data-ds='ferrum'] .pane__closed { font: var(--text-mono-sm); }
+:root[data-ds='ferrum'] .pane__bar .ds-tile { display: none; }
+:root[data-ds='ferrum'] .pane__bar .ds-iconbtn { width: 24px; height: 24px; }
+:root[data-ds='ferrum'] .pane__term { padding: var(--space-3) 0 0 var(--space-3); }
+:root[data-ds='ferrum'] .detached .pane { outline: none; }
+
+/* ── Settings, sheets ─────────────────────────────────────── */
+:root[data-ds='ferrum'] .theme-grid { gap: var(--space-3); padding: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+:root[data-ds='ferrum'] .theme-card { padding: var(--space-2); border-radius: var(--radius-xs); background: var(--bg-elevated); box-shadow: inset 0 0 0 1px var(--separator); text-align: left; font: var(--text-mono-sm); }
+:root[data-ds='ferrum'] .theme-card__preview { height: 40px; border-radius: 0; gap: 0; padding: 0; grid-template-columns: 1fr 1fr 1fr; }
+:root[data-ds='ferrum'] .theme-card__preview > span { border-radius: 0; }
+:root[data-ds='ferrum'] .theme-card__preview > span:last-child { padding: 0; }
+:root[data-ds='ferrum'] .theme-card__preview i { height: 100%; width: 100%; border-radius: 0; opacity: 1 !important; }
+:root[data-ds='ferrum'] .theme-card__preview i + i { display: none; }
+:root[data-ds='ferrum'] .theme-card__note { margin: 0; font: var(--text-footnote); }
+:root[data-ds='ferrum'] .theme-card:hover .theme-card__preview { box-shadow: 0 0 0 1px var(--separator-opaque); }
+:root[data-ds='ferrum'] .theme-card.is-selected { box-shadow: inset 0 0 0 2px var(--tint); }
+:root[data-ds='ferrum'] .theme-card.is-selected .theme-card__preview { box-shadow: none; }
+:root[data-ds='ferrum'] .theme-card.is-selected .theme-card__name { font-weight: 500; }
+:root[data-ds='ferrum'] .tint-swatch { width: 18px; height: 18px; border-radius: var(--radius-xs); }
+:root[data-ds='ferrum'] .tint-swatch:hover { transform: none; box-shadow: 0 0 0 1px var(--label-3); }
+:root[data-ds='ferrum'] .tint-swatch.is-selected { box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 3px var(--label-1); }
+:root[data-ds='ferrum'] .tint-text { height: 22px; border-radius: var(--radius-xs); }
+:root[data-ds='ferrum'] .kind-picker button { border-radius: var(--radius-xs); box-shadow: inset 0 0 0 1px var(--separator); background: transparent; }
+:root[data-ds='ferrum'] .kind-picker button.is-selected { box-shadow: inset 0 0 0 1px var(--tint); }
+:root[data-ds='ferrum'] .fingerprint { font-family: var(--font-mono); }
+:root[data-ds='ferrum'] .toast-area { border-radius: var(--radius-xs); }
+
+/* ── Network map ──────────────────────────────────────────── */
+:root[data-ds='ferrum'] .map-canvas .react-flow { --xy-background-pattern-color: var(--map-grid); }
+:root[data-ds='ferrum'] .map-palette__item { height: 28px; border-radius: 0; font: var(--text-mono-strong); }
+:root[data-ds='ferrum'] .map-node {
+  gap: var(--space-3); width: calc(184px * var(--map-scale, 1)); padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-xs); box-shadow: 0 0 0 1px var(--separator-opaque);
+}
+:root[data-ds='ferrum'] .map-node.is-selected { box-shadow: 0 0 0 2px var(--tint); }
+:root[data-ds='ferrum'] .map-node--down { background: var(--bg-elevated); box-shadow: 0 0 0 1px var(--red); }
+:root[data-ds='ferrum'] .map-node--down.is-selected { box-shadow: 0 0 0 2px var(--tint); }
+:root[data-ds='ferrum'] .map-node .ds-tile { box-shadow: none; background: transparent; width: calc(20px * var(--map-scale, 1)); }
+:root[data-ds='ferrum'] .map-node .ds-tile--md svg { width: calc(16px * var(--map-scale, 1)); height: calc(16px * var(--map-scale, 1)); }
+:root[data-ds='ferrum'] .map-node__name { font: var(--text-mono-strong); font-size: calc(12px * var(--map-scale, 1)); line-height: 1.35; }
+:root[data-ds='ferrum'] .map-node__metrics { font: var(--text-mono-sm); font-size: calc(11px * var(--map-scale, 1)); }
+:root[data-ds='ferrum'] .map-label { border-radius: var(--radius-xs); font: var(--text-callout); font-size: calc(12px * var(--map-scale, 1)); }
+:root[data-ds='ferrum'] .map-zone { border-radius: 0; border-width: 1px; background: color-mix(in srgb, var(--c) 5%, transparent); }
+:root[data-ds='ferrum'] .map-zone--circle { border-radius: 50%; }
+:root[data-ds='ferrum'] .map-zone__title {
+  top: -8px; left: var(--space-3); padding: 0 var(--space-2); border-radius: 0; background: var(--bg-content);
+  font: var(--text-caption); letter-spacing: var(--tracking-caption); text-transform: uppercase; color: var(--c);
+}
+:root[data-ds='ferrum'] .map-zone__count { font: var(--text-caption); color: var(--label-3); }
+:root[data-ds='ferrum'] .map-trail { border-radius: var(--radius-xs); box-shadow: 0 0 0 1px var(--separator-opaque); font: var(--text-mono-sm); }
+:root[data-ds='ferrum'] .map-hint { border-radius: var(--radius-xs); font: var(--text-mono-sm); }
+:root[data-ds='ferrum'] .map-edge__label { border-radius: 0; }
+:root[data-ds='ferrum'] .map-edge__bend { border-radius: 1px; }
+:root[data-ds='ferrum'] .map-edge.is-up .react-flow__edge-path { stroke: var(--green); stroke-width: 1.5; }
+:root[data-ds='ferrum'] .map-edge.is-down .react-flow__edge-path { stroke-width: 1.5; stroke-dasharray: 4 4; }
+:root[data-ds='ferrum'] .map-edge .react-flow__edge-path { stroke-width: 1.5; }
+:root[data-ds='ferrum'] .map-canvas.is-animated .map-edge__flow { stroke-linecap: butt; stroke-width: 2; }
+:root[data-ds='ferrum'] .link-picker__item { border-radius: 0; }
+:root[data-ds='ferrum'] .link-picker__badge { border-radius: var(--radius-xs); }
+
+/* ── Tools ────────────────────────────────────────────────── */
+:root[data-ds='ferrum'] .tl-field > span:first-child { font: var(--text-caption); letter-spacing: var(--tracking-caption); text-transform: uppercase; color: var(--label-3); padding-left: 0; }
+:root[data-ds='ferrum'] .tl-input { font-family: var(--font-mono); box-shadow: inset 0 0 0 1px var(--separator-opaque); }
+:root[data-ds='ferrum'] .tl-chip { border-radius: var(--radius-xs); font: var(--text-mono-sm); }

@@ -1,5 +1,5 @@
 import type { Credential, StoreSnapshot } from '@shared/types'
-import { Button, EmptyState, Group, Row } from '../design/components'
+import { Button, EmptyState, Group, openContextMenu, Row } from '../design/components'
 
 export function CredentialsScreen({ store, onEdit }: { store: StoreSnapshot; onEdit(c: Credential | null): void }) {
   const usage = (id: string) =>
@@ -30,6 +30,10 @@ export function CredentialsScreen({ store, onEdit }: { store: StoreSnapshot; onE
               return (
                 <Row
                   key={c.id}
+                  onContextMenu={(e) => openContextMenu(e, [
+                    { label: 'Изменить', icon: 'pencil', onSelect: () => onEdit(c) },
+                    { label: 'Новая учётка', icon: 'plus', onSelect: () => onEdit(null) }
+                  ], c.name)}
                   label={c.name}
                   icon="key"
                   tint="indigo"

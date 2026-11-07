@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { Tint } from '@shared/types'
 import { Icon, type IconName } from './icons'
 
@@ -64,17 +65,18 @@ export function Group({ header, footer, children }: { header?: ReactNode; footer
   )
 }
 
-export function Row({ label, icon, tint, detail, chevron, onClick, children }: {
+export function Row({ label, icon, tint, detail, chevron, onClick, onContextMenu, children }: {
   label: ReactNode
   icon?: IconName
   tint?: Tint
   detail?: ReactNode
   chevron?: boolean
   onClick?: () => void
+  onContextMenu?: (e: ReactMouseEvent) => void
   children?: ReactNode
 }) {
   return (
-    <div className={cx('ds-row', onClick && 'is-pressable')} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}>
+    <div className={cx('ds-row', onClick && 'is-pressable')} onClick={onClick} onContextMenu={onContextMenu} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}>
       {icon && <Tile icon={icon} tint={tint} size="sm" />}
       <span className="ds-row__label">{label}</span>
       <span className="ds-row__control">
@@ -187,34 +189,133 @@ export function Sheet({ title, onCancel, onDone, doneLabel = 'Готово', don
 
 export interface MenuItem {
   label: string
+  /** Small mono text after the label, e.g. which of a host's addresses the item goes to. */
+  detail?: string
   icon?: IconName
   destructive?: boolean
+  /** A line above this item, between groups of actions. */
+  sep?: boolean
   onSelect(): void
 }
 
 export function MenuButton({ items, label = 'Ещё', icon = 'ellipsis' }: { items: MenuItem[]; label?: string; icon?: IconName }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
-    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && !listRef.current?.contains(e.target as Node) && setOpen(false)
+    const shut = () => setOpen(false)
     window.addEventListener('mousedown', close)
-    return () => window.removeEventListener('mousedown', close)
+    // The list is fixed to the window: scrolling the page under it would leave it behind.
+    window.addEventListener('scroll', shut, true)
+    window.addEventListener('resize', shut)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('scroll', shut, true)
+      window.removeEventListener('resize', shut)
+    }
+  }, [open])
+  // The list lives in <body>, so a scrolling container, the next card or a table row can't clip or cover it;
+  // near the bottom of the window it opens upwards.
+  useLayoutEffect(() => {
+    if (!open || !ref.current || !listRef.current) return
+    const r = ref.current.getBoundingClientRect()
+    const h = listRef.current.offsetHeight
+    const below = r.bottom + 6
+    const top = below + h > window.innerHeight - 8 ? Math.max(8, r.top - h - 6) : below
+    setPos({ top, right: Math.max(8, window.innerWidth - r.right) })
   }, [open])
   return (
-    <div className="ds-menu" ref={ref} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-      <IconButton icon={icon} label={label} active={open} onClick={() => setOpen(!open)} />
-      {open && (
-        <div className="ds-menu__list" role="menu">
-          {items.map((it) => (
-            <button key={it.label} role="menuitem" className={cx('ds-menu__item', it.destructive && 'is-destructive')} onClick={() => (setOpen(false), it.onSelect())}>
-              <span>{it.label}</span>
-              {it.icon && <Icon name={it.icon} size={15} />}
-            </button>
-          ))}
-        </div>
-      )}
+    <div className={cx('ds-menu', open && 'is-open')} ref={ref} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <IconButton icon={icon} label={label} active={open} onClick={() => (setPos(null), setOpen(!open))} />
+      {open &&
+        createPortal(
+          <div
+            ref={listRef}
+            className="ds-menu__list is-floating"
+            role="menu"
+            style={pos ? { top: pos.top, right: pos.right } : { visibility: 'hidden' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {items.map((it, i) => (
+              <div key={`${it.label}|${it.detail ?? ''}`} style={{ display: 'contents' }}>
+                {it.sep && i > 0 && <div className="ctx-menu__sep" role="separator" />}
+                <button role="menuitem" className={cx('ds-menu__item', it.destructive && 'is-destructive')} onClick={() => (setOpen(false), it.onSelect())}>
+                  <span>{it.label}</span>
+                  {it.detail && <small className="ds-menu__detail">{it.detail}</small>}
+                  {it.icon && <Icon name={it.icon} size={15} />}
+                </button>
+              </div>
+            ))}
+          </div>,
+          document.body
+        )}
     </div>
+  )
+}
+
+/* ── Right-click menu: the same items as ••• at the pointer ── */
+
+let showContext: ((m: { x: number; y: number; title?: string; items: MenuItem[] } | null) => void) | undefined
+
+/** Opens a menu at the pointer instead of the browser's own; one at a time, for any element. */
+export function openContextMenu(e: ReactMouseEvent, items: MenuItem[], title?: string): void {
+  e.preventDefault()
+  e.stopPropagation()
+  if (items.length) showContext?.({ x: e.clientX, y: e.clientY, title, items })
+}
+
+/** Rendered once in the window; openContextMenu() shows its menu here. */
+export function ContextMenuHost() {
+  const [menu, setMenu] = useState<{ x: number; y: number; title?: string; items: MenuItem[] } | null>(null)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    showContext = (m) => (setPos(null), setMenu(m))
+    return () => void (showContext = undefined)
+  }, [])
+  useEffect(() => {
+    if (!menu) return
+    const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setMenu(null)
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null)
+    const shut = () => setMenu(null)
+    window.addEventListener('mousedown', down, true)
+    window.addEventListener('keydown', key)
+    window.addEventListener('blur', shut)
+    window.addEventListener('scroll', shut, true)
+    window.addEventListener('resize', shut)
+    return () => {
+      window.removeEventListener('mousedown', down, true)
+      window.removeEventListener('keydown', key)
+      window.removeEventListener('blur', shut)
+      window.removeEventListener('scroll', shut, true)
+      window.removeEventListener('resize', shut)
+    }
+  }, [menu])
+  // Kept inside the window: near the right or bottom edge it opens to the left or upwards.
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!menu || !r) return
+    setPos({ left: Math.max(8, Math.min(menu.x, window.innerWidth - r.width - 8)), top: Math.max(8, Math.min(menu.y, window.innerHeight - r.height - 8)) })
+  }, [menu])
+  if (!menu) return null
+  return createPortal(
+    <div ref={ref} className="ds-menu__list is-floating ctx-menu" role="menu" style={pos ?? { left: menu.x, top: menu.y, visibility: 'hidden' }} onContextMenu={(e) => e.preventDefault()}>
+      {menu.title && <div className="ctx-menu__title">{menu.title}</div>}
+      {menu.items.map((it, i) => (
+        <div key={`${i}|${it.label}|${it.detail ?? ''}`} style={{ display: 'contents' }}>
+          {it.sep && i > 0 && <div className="ctx-menu__sep" role="separator" />}
+          <button role="menuitem" className={cx('ds-menu__item', it.destructive && 'is-destructive')} onClick={() => (setMenu(null), it.onSelect())}>
+            <span>{it.label}</span>
+            {it.detail && <small className="ds-menu__detail">{it.detail}</small>}
+            {it.icon && <Icon name={it.icon} size={15} />}
+          </button>
+        </div>
+      ))}
+    </div>,
+    document.body
   )
 }
 

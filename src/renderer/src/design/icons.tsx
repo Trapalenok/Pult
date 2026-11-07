@@ -13,6 +13,8 @@ const sw = {
   key: 'M8 19a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm2.8-6.8L20 3m-3 3 3 3m-5.5-.5 2 2',
   terminal: 'M18.5 4h-13a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h13a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3ZM7 9.5l3 2.5-3 2.5m5.5.5H17',
   plus: 'M12 5v14M5 12h14',
+  sidebar: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm4 0v16',
+  image: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm-2 12 5-5 4 4 3-3 6 6M15.5 8.5h.01',
   search: 'M11 17.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13ZM20 20l-4.2-4.2',
   chevronRight: 'm9 6 6 6-6 6',
   chevronLeft: 'm15 6-6 6 6 6',
@@ -75,7 +77,8 @@ const legacy = {
   shapeCircle: 'M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z',
   zone: 'M3 6V3h3m2.5 0h3m2.5 0h3v3m0 2.5v3m0 2.5v3h-3m-2.5 0h-3M6 17H3v-3m0-2.5v-3',
   select: 'M3 6V3h3m3 0h2M3 9v2m0 3v1.5M17 6V3h-3m-4.5 7.5 7 2.5-3 1.2-1.2 3Z',
-  dash: 'M5 10h10'
+  dash: 'M5 10h10',
+  reconnect: 'M15.5 10a5.5 5.5 0 1 1-1.6-3.9M14.5 3.5v3h-3'
 } as const
 
 const paths = { ...legacy, ...sw }

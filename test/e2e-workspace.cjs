@@ -66,7 +66,7 @@ const assert = (cond, msg) => { if (!cond) { console.log('FAIL ' + msg); process
         await new Promise((r) => setTimeout(r, 150 + Math.random() * 300))
         if (h.name === 'cam-hall') throw new Error("Error invoking remote method 'ssh:connect': Error: Хост не отвечает (таймаут).")
         setTimeout(() => emit('ssh:data', id, TERM(h.name), TERM(h.name).length), 100); return { sessionId: id, hostId, title: h.name } },
-      scrollback: async () => ({ data: '', end: 0 }), onHostKeyPrompt: on('hk'), answerHostKey() {}, write() {}, broadcast: (ids, d) => window.__broadcasts.push([ids, d]), resize() {}, close() {}, popout() {},
+      scrollback: async () => ({ data: '', end: 0 }), onStoreChanged: on('store'), onHostKeyPrompt: on('hk'), onHostKeyCancel: on('hkc'), answerHostKey() {}, write() {}, broadcast: (ids, d) => window.__broadcasts.push([ids, d]), resize() {}, close() {}, popout() {},
       setTheme: (s) => window.__scheme(s), setChrome() {}, monitorAll: async () => status, monitorProbe() {}, onMonitor: on('mon'),
       openInBrowser: async () => {}, openWinbox: async () => {}, onData: on('ssh:data'), onClosed: on('closed'), onReturned: on('ret'),
       toolStart() {}, toolStop() {}, onToolEvent: on('tool'), dnsQuery: async () => ({ answers: [] }),

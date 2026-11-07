@@ -1,10 +1,59 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { JUMP_DEFAULT_PORT, type AlgoProfile, type AppSettings, type Credential, type Folder, type ImportMode, type ImportPreview, type JumpHost, type JumpKind, type StoreSnapshot } from '@shared/types'
 import { Button, Field, Group, Row, Segmented, Select, Toggle } from '../design/components'
-import { THEMES, themeById } from '../design/themes'
+import { DESIGN_SYSTEMS, designOf, themeById, themesFor } from '../design/themes'
 import { TintPicker } from '../sheets/fields'
 import { ALGO_LABEL, errorText, plural } from '../util'
 import { ForeignImport } from './ForeignImport'
+import { ask } from '../design/confirm'
+
+const MAP_SCALES = [0.8, 1, 1.2, 1.4, 1.6]
+
+/** Text and background presets for the terminal; "Как в теме" clears both. */
+const TERM_PRESETS: { name: string; fg?: string; bg?: string }[] = [
+  { name: 'Как в теме' },
+  { name: 'Зелёный (PuTTY)', fg: '#00ff00', bg: '#000000' },
+  { name: 'Серый (PuTTY)', fg: '#bbbbbb', bg: '#000000' },
+  { name: 'Янтарный', fg: '#ffb000', bg: '#0c0800' },
+  { name: 'Белый на синем', fg: '#ffffff', bg: '#000080' },
+  { name: 'Чёрный на белом', fg: '#1a1a1a', bg: '#ffffff' }
+]
+
+/** The theme's terminal colour (or the one set here) as #rrggbb for <input type="color">. */
+function cssHex(name: string): string {
+  const c = document.createElement('canvas').getContext('2d')!
+  c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#000000'
+  return String(c.fillStyle).startsWith('#') ? String(c.fillStyle) : '#000000'
+}
+
+function TermColors({ settings, onChange }: { settings: AppSettings; onChange(s: AppSettings): void }) {
+  const preset = TERM_PRESETS.find((p) => p.fg === settings.termFg && p.bg === settings.termBg)
+  const fg = settings.termFg ?? cssHex('--term-fg')
+  const bg = settings.termBg ?? cssHex('--bg-terminal')
+  return (
+    <Group header="Цвета терминала" footer="Цвет символов и фона во всех сессиях. Цветной вывод коммутаторов (ошибки, приглашение) остаётся в цветах темы.">
+      <Row label="Набор">
+        <Select<string>
+          value={preset ? preset.name : 'custom'}
+          onChange={(v) => {
+            const p = TERM_PRESETS.find((x) => x.name === v)
+            if (p) onChange({ ...settings, termFg: p.fg, termBg: p.bg })
+          }}
+          options={[...TERM_PRESETS.map((p) => ({ value: p.name, label: p.name })), ...(preset ? [] : [{ value: 'custom', label: 'Свои цвета' }])]}
+        />
+      </Row>
+      <Row label="Цвет символов">
+        <input type="color" className="color-input" aria-label="Цвет символов" value={fg} onChange={(e) => onChange({ ...settings, termFg: e.target.value, termBg: settings.termBg ?? bg })} />
+      </Row>
+      <Row label="Фон">
+        <input type="color" className="color-input" aria-label="Фон терминала" value={bg} onChange={(e) => onChange({ ...settings, termBg: e.target.value, termFg: settings.termFg ?? fg })} />
+      </Row>
+      <div className="term-sample mono" style={{ color: fg, background: bg }}>
+        &lt;HW5720&gt;display version
+      </div>
+    </Group>
+  )
+}
 
 export function SettingsScreen({ settings, credentials, folders, onChange, onOpenCredentials, onImported }: {
   settings: AppSettings
@@ -19,7 +68,8 @@ export function SettingsScreen({ settings, credentials, folders, onChange, onOpe
   const setJump = (p: Partial<JumpHost>) => set('jump', { ...jump, ...p })
   const jumpKind: JumpKind = jump.kind ?? 'ssh'
   const socks = jumpKind === 'socks5'
-  const current = themeById(settings.theme)
+  const ds = designOf(settings)
+  const current = themeById(settings.theme, ds)
   return (
     <div className="screen">
       <div className="screen__bar drag" />
@@ -96,9 +146,21 @@ export function SettingsScreen({ settings, credentials, folders, onChange, onOpe
           )}
         </Group>
 
-        <Group header="Тема">
+        <Group header="Дизайн-система" footer="Ferrum и Shellwise меняют только вид: хосты, папки, сессии и настройки остаются прежними. У каждой системы свои темы.">
+          <Row label="Оформление">
+            <Segmented
+              size="sm"
+              value={ds}
+              // The other system's theme does not exist here: start from "Как в Windows".
+              onChange={(design) => onChange({ ...settings, design, theme: themeById(settings.theme, design).id })}
+              options={DESIGN_SYSTEMS.map((d) => ({ value: d.id, label: d.name, title: d.note }))}
+            />
+          </Row>
+        </Group>
+
+        <Group header={`Тема ${DESIGN_SYSTEMS.find((d) => d.id === ds)!.name}`}>
           <div className="theme-grid" role="radiogroup" aria-label="Тема">
-            {THEMES.map((t) => (
+            {themesFor(ds).map((t) => (
               <button key={t.id} role="radio" aria-checked={t.id === current.id} className={`theme-card ${t.id === current.id ? 'is-selected' : ''}`} onClick={() => set('theme', t.id)}>
                 <span className="theme-card__preview" style={{ background: t.preview[0] }}>
                   <span style={{ background: t.preview[1] }} />
@@ -129,7 +191,20 @@ export function SettingsScreen({ settings, credentials, folders, onChange, onOpe
           </Row>
         </Group>
 
-        <Group header="Анимации" footer="Мигание портов на узлах карты и бегущий трафик по живым связям.">
+        <TermColors settings={settings} onChange={onChange} />
+
+        <Group header="Карта сети" footer="Размер меняет карточки хостов, листов и подписи на всех листах. Анимации: мигание портов на узлах и бегущий трафик по живым связям.">
+          <Row label="Размер карточек" icon="map" tint="indigo">
+            <Segmented
+              size="sm"
+              value={String(settings.mapScale ?? 1)}
+              onChange={(v) => set('mapScale', Number(v) === 1 ? undefined : Number(v))}
+              options={MAP_SCALES.map((v) => ({ value: String(v), label: `${Math.round(v * 100)} %` }))}
+            />
+          </Row>
+          <Row label="Названия хостов целиком" detail="длинное название переносится на следующую строку">
+            <Toggle checked={settings.mapFullNames !== false} onChange={(v) => set('mapFullNames', v)} label="Названия хостов целиком" />
+          </Row>
           <Row label="Анимации на карте" icon="activity" tint="blue">
             <Toggle checked={settings.animations ?? true} onChange={(v) => set('animations', v)} label="Анимации" />
           </Row>
@@ -174,6 +249,12 @@ function ConfigTransfer({ onImported }: { onImported(s: StoreSnapshot): void }) 
   const [mode, setMode] = useState<ImportMode>('merge')
   const [importPass, setImportPass] = useState('')
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
+  // The result line goes away by itself, like the error toasts.
+  useEffect(() => {
+    if (!note) return
+    const t = setTimeout(() => setNote(null), 12000)
+    return () => clearTimeout(t)
+  }, [note])
   const [busy, setBusy] = useState(false)
 
   const passProblem = !withSecrets ? null : pass.length < 6 ? 'Пароль файла: не короче 6 символов' : pass !== pass2 ? 'Пароли не совпадают' : null
@@ -194,7 +275,7 @@ function ConfigTransfer({ onImported }: { onImported(s: StoreSnapshot): void }) 
     act(async () => {
       const path = await window.api.exportConfig(withSecrets ? pass : undefined)
       if (!path) return
-      setNote({ ok: true, text: `Сохранено: ${path}${withSecrets ? '. Пароли внутри, зашифрованы.' : '. Без паролей.'}` })
+      setNote({ ok: true, text: `Сохранено: ${path}${withSecrets ? '. Пароли и SNMP community внутри, зашифрованы.' : '. Без паролей и SNMP community.'}` })
       setPass('')
       setPass2('')
     })
@@ -211,7 +292,8 @@ function ConfigTransfer({ onImported }: { onImported(s: StoreSnapshot): void }) 
   const apply = () =>
     act(async () => {
       if (!preview) return
-      if (mode === 'replace' && !confirm('Заменить всю текущую базу содержимым файла? Хосты, папки, учётки и карта, которых нет в файле, будут удалены.')) return
+      if (preview.hasSecrets && !importPass) throw new Error('Введите пароль файла, заданный при экспорте.')
+      if (mode === 'replace' && !(await ask('Заменить всю текущую базу содержимым файла? Хосты, папки, учётки и карта, которых нет в файле, будут удалены.', { ok: 'Заменить', destructive: true }))) return
       const s = await window.api.importApply(preview.token, mode, preview.hasSecrets && importPass ? importPass : undefined)
       onImported(s)
       const f = preview.fresh
@@ -232,8 +314,8 @@ function ConfigTransfer({ onImported }: { onImported(s: StoreSnapshot): void }) 
         header="Перенос конфигурации"
         footer="Один JSON-файл со всей базой: папки, хосты, учётки, карта, настройки и доверенные ключи хостов. Пароли и SNMP-community на этом ПК зашифрованы под вашу учётку Windows, поэтому в файл они попадают только с паролем файла, а без него переносятся без паролей."
       >
-        <Row label="Включить пароли" icon="key" tint="orange">
-          <Toggle checked={withSecrets} onChange={setWithSecrets} label="Включить пароли" />
+        <Row label="Пароли и SNMP/LLDP community" icon="key" tint="orange">
+          <Toggle checked={withSecrets} onChange={setWithSecrets} label="Включить пароли и SNMP community" />
         </Row>
         {withSecrets && (
           <>
@@ -258,7 +340,7 @@ function ConfigTransfer({ onImported }: { onImported(s: StoreSnapshot): void }) 
           header={`Импорт: ${preview.fileName}`}
           footer={
             mode === 'merge'
-              ? 'Добавятся только записи, которых здесь ещё нет. Всё, что уже есть, и ваши настройки останутся как были.'
+              ? 'Добавятся только новые записи. У существующих хостов, папок и учёток логины и пароли не обновятся, даже если отсутствуют. Для полного переноса базы используйте «Заменить всё», предварительно сохранив текущую базу.'
               : 'Текущая база будет удалена и заменена файлом, включая настройки. Доверенные ключи хостов этого ПК сохранятся.'
           }
         >
@@ -267,10 +349,10 @@ function ConfigTransfer({ onImported }: { onImported(s: StoreSnapshot): void }) 
           <Row label="Папки" detail={`${c.folders}, новых ${preview.fresh.folders}`} />
           <Row label="Учётные данные" detail={`${c.credentials}, новых ${preview.fresh.credentials}`} />
           <Row label="Листы карты" detail={`${c.maps}, новых ${preview.fresh.maps}`} />
-          <Row label="Пароли" detail={preview.hasSecrets ? 'есть, зашифрованы' : 'нет в файле'} />
+          <Row label="Пароли и community" detail={preview.hasSecrets ? 'зашифрованный блок включён' : 'нет в файле'} />
           {preview.hasSecrets && (
             <Row label="Пароль файла">
-              <Field type="password" value={importPass} placeholder="пусто = без паролей" onChange={(e) => setImportPass(e.target.value)} />
+              <Field type="password" autoComplete="off" value={importPass} placeholder="обязателен: пароль при экспорте" onChange={(e) => setImportPass(e.target.value)} />
             </Row>
           )}
           <Row label="Как импортировать">
@@ -283,7 +365,7 @@ function ConfigTransfer({ onImported }: { onImported(s: StoreSnapshot): void }) 
           </Row>
           <Row label="">
             <Button variant="plain" size="sm" disabled={busy} onClick={() => setPreview(null)}>Отмена</Button>
-            <Button size="sm" disabled={busy} onClick={apply}>Импортировать</Button>
+            <Button size="sm" disabled={busy || (preview.hasSecrets && !importPass)} onClick={apply}>Импортировать</Button>
           </Row>
         </Group>
       )}

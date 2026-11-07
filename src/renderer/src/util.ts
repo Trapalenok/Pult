@@ -1,5 +1,6 @@
 import { dropOwn, effectiveSettings, folderChain, INHERIT_LABEL, ownFields, type InheritField } from '@shared/inherit'
-import type { AlgoProfile, Folder, FolderKind, Host, HostIcon, HostStatus, Store, StoreSnapshot, Tint } from '@shared/types'
+import { hostAddresses, type AlgoProfile, type Folder, type FolderKind, type Host, type HostIcon, type HostStatus, type Store, type StoreSnapshot, type Tint } from '@shared/types'
+import type { MenuItem } from './design/components'
 import type { IconName } from './design/icons'
 
 /** A host's colour: its own, else the nearest folder's, else blue. */
@@ -162,4 +163,62 @@ export function moveInto<T extends Store>(store: T, hostIds: string[], folderIds
     folders: store.folders.map((f) => (fs.has(f.id) ? { ...f, parentId: target } : f)),
     hosts: store.hosts.map((h) => (hs.has(h.id) ? { ...h, folderId: target } : h))
   }
+}
+
+/** Where connect, web and WinBox go by default: the first address that answered the last ping, else the main one. */
+export function preferredAddress(host: Host, st?: HostStatus): string {
+  const all = hostAddresses(host)
+  return st?.preferred && all.includes(st.preferred) ? st.preferred : (all[0] ?? host.address)
+}
+
+/**
+ * One menu entry per address for a host that has several (the default one first, with no address
+ * passed, so connecting can still fall back to the next one); a single entry otherwise.
+ */
+export function perAddress(host: Host, st: HostStatus | undefined, item: Omit<MenuItem, 'onSelect' | 'detail'>, run: (address?: string) => void): MenuItem[] {
+  const all = hostAddresses(host)
+  if (all.length < 2) return [{ ...item, onSelect: () => run() }]
+  const pref = preferredAddress(host, st)
+  return [{ ...item, detail: pref, onSelect: () => run() }, ...all.filter((a) => a !== pref).map((a) => ({ ...item, icon: undefined, detail: a, onSelect: () => run(a) }))]
+}
+
+/** Ping result of one address of a multi-address host: true/false, or undefined when not checked. */
+export function addressAlive(st: HostStatus | undefined, address: string): boolean | undefined {
+  const r = st?.addresses?.find((x) => x.address === address)
+  return r ? r.rtt !== null : undefined
+}
+
+/** Search text of a host: name and every address. */
+export const hostSearchText = (h: Host) => `${h.name} ${hostAddresses(h).join(' ')}`.toLowerCase()
+
+/** What deleting these folders (with everything in them) and hosts takes away. */
+export function deletionScope(store: Store, hostIds: string[], folderIds: string[]): { folders: Set<string>; hosts: Set<string> } {
+  const folders = new Set<string>()
+  for (const id of folderIds) subtreeIds(store.folders, id).forEach((x) => folders.add(x))
+  const hosts = new Set(hostIds)
+  for (const h of store.hosts) if (h.folderId && folders.has(h.folderId)) hosts.add(h.id)
+  return { folders, hosts }
+}
+
+/**
+ * The store without those folders and hosts. Workspaces forget the hosts; their nodes on the map
+ * turn into "(удалён)" labels rather than vanishing silently. Passwords go with them on save.
+ */
+export function removeItems<T extends Store>(store: T, scope: { folders: Set<string>; hosts: Set<string> }): T {
+  const name = new Map(store.hosts.map((h) => [h.id, h.name]))
+  return {
+    ...store,
+    folders: store.folders.filter((f) => !scope.folders.has(f.id)),
+    hosts: store.hosts.filter((h) => !scope.hosts.has(h.id)),
+    workspaces: store.workspaces?.map((w) => ({ ...w, hostIds: w.hostIds.filter((id) => !scope.hosts.has(id)) })),
+    maps: store.maps.map((m) => ({
+      ...m,
+      nodes: m.nodes.map((n) => (n.hostId && scope.hosts.has(n.hostId) ? { ...n, hostId: undefined, label: `${name.get(n.hostId)} (удалён)` } : n))
+    }))
+  }
+}
+
+/** "3 подпапки и 12 хостов" (only the parts that are there). */
+export function contentsText(folders: number, hosts: number): string {
+  return [folders && plural(folders, 'подпапка', 'подпапки', 'подпапок'), hosts && plural(hosts, 'хост', 'хоста', 'хостов')].filter(Boolean).join(' и ')
 }

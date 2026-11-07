@@ -2,6 +2,7 @@ import { app, safeStorage } from 'electron'
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { Store, StoreSnapshot } from '@shared/types'
+import { cleanHostLldp, retainLldpBindings, type LldpSnapshot } from '@shared/lldp'
 
 // A JSON file in userData: one per Windows account, never synced anywhere.
 const file = () => join(app.getPath('userData'), 'store.json')
@@ -10,6 +11,11 @@ export interface KnownHost {
   keyType: string
   fingerprint: string
   addedAt: string
+  /**
+   * Keys of other types trusted for the same address:port. A device often has several (DSA, RSA,
+   * ECDSA) and offers a different one per algorithm profile; files written before 0.3.3 have none.
+   */
+  others?: Omit<KnownHost, 'others'>[]
 }
 
 interface OnDisk extends Store {
@@ -46,6 +52,7 @@ function read(): OnDisk {
     const loaded = existsSync(file()) ? JSON.parse(readFileSync(file(), 'utf8')) : JSON.parse(JSON.stringify(SAMPLE))
     // Files from older versions lack the newer collections.
     disk = { credentials: [], maps: [], workspaces: [], secrets: {}, knownHosts: {}, ...loaded }
+    disk.hosts = cleanHostLldp(disk.hosts)
   }
   return disk
 }
@@ -62,12 +69,32 @@ export function loadStore(): StoreSnapshot {
 }
 
 /** Renderer sends the editable collections; secrets are kept, minus those of deleted items. */
-export function saveStore(next: Store): StoreSnapshot {
+export function saveStore(next: Store, importing = false): StoreSnapshot {
   const d = read()
   const alive = new Set([...next.folders, ...next.hosts, ...next.credentials].map((x) => x.id))
   const owner = (secretId: string) => secretId.replace(/^snmp:/, '')
   const secrets = Object.fromEntries(Object.entries(d.secrets).filter(([id]) => alive.has(owner(id))))
-  disk = { ...d, folders: next.folders, hosts: next.hosts, credentials: next.credentials, maps: next.maps, workspaces: next.workspaces ?? [], settings: next.settings, secrets }
+  const previous = new Map(d.hosts.map((h) => [h.id, h]))
+  const hosts = cleanHostLldp(next.hosts).map((h) => {
+    const old = previous.get(h.id)
+    if (!importing && old && (h.lldpRevision ?? 0) !== (old.lldpRevision ?? 0)) {
+      return { ...h, lldp: old.lldp, lldpRevision: old.lldpRevision }
+    }
+    const changed = importing || JSON.stringify(h.lldp) !== JSON.stringify(old?.lldp)
+    return { ...h, lldpRevision: (old?.lldpRevision ?? 0) + (changed ? 1 : 0) }
+  })
+  disk = { ...d, folders: next.folders, hosts: cleanHostLldp(hosts), credentials: next.credentials, maps: next.maps, workspaces: next.workspaces ?? [], settings: next.settings, secrets }
+  write()
+  return loadStore()
+}
+
+/** Patch only the latest host, preserving concurrent edits and user bindings. */
+export function saveAutomaticLldp(hostId: string, snapshot: LldpSnapshot): StoreSnapshot {
+  const d = read()
+  const host = d.hosts.find((h) => h.id === hostId)
+  if (!host) return loadStore()
+  host.lldp = retainLldpBindings(snapshot, host.lldp)
+  host.lldpRevision = (host.lldpRevision ?? 0) + 1
   write()
   return loadStore()
 }
@@ -85,12 +112,19 @@ export function getSecret(id: string | undefined): string | undefined {
   return v === undefined ? undefined : decrypt(v)
 }
 
-export function getKnownHost(address: string, port: number): KnownHost | undefined {
-  return read().knownHosts[`${address}:${port}`]
+/** Every key trusted for address:port, one per key type. */
+export function getKnownKeys(address: string, port: number): Omit<KnownHost, 'others'>[] {
+  const k = read().knownHosts[`${address}:${port}`]
+  if (!k) return []
+  const { others, ...main } = k
+  return [main, ...(others ?? [])]
 }
 
-export function trustHost(address: string, port: number, key: Omit<KnownHost, 'addedAt'>): void {
-  read().knownHosts[`${address}:${port}`] = { ...key, addedAt: new Date().toISOString() }
+/** Trust a key: it replaces the key of the same type and keeps keys of other types. */
+export function trustHost(address: string, port: number, key: Omit<KnownHost, 'addedAt' | 'others'>): void {
+  const id = `${address}:${port}`
+  const rest = getKnownKeys(address, port).filter((k) => k.keyType !== key.keyType)
+  read().knownHosts[id] = { ...key, addedAt: new Date().toISOString(), ...(rest.length ? { others: rest } : {}) }
   write()
 }
 
@@ -112,7 +146,7 @@ export function applyImport(next: Store, knownHosts: Record<string, KnownHost>, 
   const d = read()
   for (const [id, v] of Object.entries(secrets)) if (v) d.secrets[id] = encrypt(v)
   disk = { ...d, knownHosts: { ...knownHosts, ...d.knownHosts } }
-  return saveStore(next)
+  return saveStore(next, true)
 }
 
 // "plain:" only where the OS has no keyring (rare Linux setups); Windows always has DPAPI.

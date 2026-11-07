@@ -67,8 +67,11 @@ function describe(sysDescr: string): string {
   return (lines.find((l) => /version/i.test(l)) ?? lines[0] ?? '').slice(0, 200)
 }
 
-/** SNMP v2c poll over UDP 161: does not use an SSH/VTY line on the device. */
-export async function pollSnmp(address: string, community: string, port = 161): Promise<SnmpStatus> {
+/**
+ * SNMP v2c poll over UDP 161: does not use an SSH/VTY line on the device.
+ * temp: false skips the temperature tables (the device was seen not to have any).
+ */
+export async function pollSnmp(address: string, community: string, { port = 161, temp = true }: { port?: number; temp?: boolean } = {}): Promise<SnmpStatus> {
   const s = snmp.createSession(address, community, { version: snmp.Version2c, timeout: 1500, retries: 1, port })
   s.on('error', () => {})
   try {
@@ -80,7 +83,7 @@ export async function pollSnmp(address: string, community: string, port = 161): 
       sysName: val(0) !== undefined ? String(val(0)) : undefined,
       sysDescr: val(1) !== undefined ? describe(String(val(1))) : undefined,
       uptime: val(2) !== undefined ? Math.round(Number(val(2)) / 100) : undefined,
-      temp: await temperature(s, objectId).catch(() => undefined)
+      ...(temp ? await temperature(s, objectId).then((t) => (t === undefined ? { noTemp: true } : { temp: t }), () => ({ noTemp: true })) : { noTemp: true })
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

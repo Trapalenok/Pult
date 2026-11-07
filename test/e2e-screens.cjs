@@ -1,12 +1,13 @@
 // Usage: build, serve out/renderer on 127.0.0.1:5199 (python3 -m http.server), then
 // PW=$(npm root -g)/playwright node test/e2e-screens.cjs docs/screens-shellwise <oat|mist|cocoa|midnight|moss|dusk>
+// Ferrum: node test/e2e-screens.cjs docs/screens-ferrum <graphite|carbon|blueprint|steel> ferrum
 // Renderer-only E2E: out/renderer served over http, window.api mocked with sample data.
 const { chromium } = require(process.env.PW)
 const OUT = process.argv[2], URL = 'http://127.0.0.1:5199/index.html'
 const theme = process.argv[3] || 'oat'
 const store = {
   secretIds: [],
-  settings: { theme, animations: false },
+  settings: { theme, design: process.argv[4], animations: false },
   credentials: [{ id: 'c1', name: 'Админ сети', username: 'netadmin' }, { id: 'c2', name: 'Huawei legacy', username: 'root' }],
   folders: [
     { id: 'f1', parentId: null, name: 'Корпус А', kind: 'building', tint: 'orange', defaults: { credentialId: 'c1' } },
@@ -56,7 +57,7 @@ const TERM = (name) => `\x1b[38;2;143;179;217mLinux ${name} 6.1.0-28-amd64\x1b[0
       loadStore: async () => store, saveStore: async (s) => Object.assign(store, s), setSecret: async () => store,
       connect: async (hostId) => { const id = 's' + ++n; const h = store.hosts.find((x) => x.id === hostId); names[id] = h.name
         setTimeout(() => emit('ssh:data', id, TERM(h.name), TERM(h.name).length), 300); return { sessionId: id, hostId, title: h.name } },
-      scrollback: async () => ({ data: '', end: 0 }), onHostKeyPrompt: on('hk'), answerHostKey() {}, write() {}, broadcast() {}, resize() {}, close() {}, popout() {},
+      scrollback: async () => ({ data: '', end: 0 }), onStoreChanged: on('store'), onHostKeyPrompt: on('hk'), onHostKeyCancel: on('hkc'), answerHostKey() {}, write() {}, broadcast() {}, resize() {}, close() {}, popout() {},
       setTheme: (s) => window.__scheme(s), setChrome() {}, monitorAll: async () => status, monitorProbe() {}, onMonitor: on('mon'),
       openInBrowser: async () => {}, openWinbox: async () => {}, onData: on('ssh:data'), onClosed: on('closed'), onReturned: on('ret'),
       toolStart() {}, toolStop() {}, onToolEvent: on('tool'), dnsQuery: async () => ({ answers: [] }),

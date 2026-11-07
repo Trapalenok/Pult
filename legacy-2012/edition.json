@@ -1,0 +1,6 @@
+{
+  "electron": "22.3.27",
+  "productName": "Pult Legacy",
+  "appId": "local.sshclient.ws2012",
+  "artifactPrefix": "Pult-Legacy"
+}

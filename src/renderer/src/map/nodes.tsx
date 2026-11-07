@@ -6,6 +6,8 @@ import { formatRtt, health } from '../util'
 export type HostNodeData = {
   name: string
   address: string
+  /** How many more addresses the host has besides the one shown. */
+  more?: number
   tint: Tint
   icon: HostIcon
   status?: HostStatus
@@ -14,12 +16,15 @@ export type HostNodeData = {
 export type LabelNodeData = { label: string }
 export type SheetNodeData = { name: string; up: number; down: number; total: number }
 export type ZoneNodeData = { name: string; shape: ZoneShape; tint: Tint; hosts: number; down: number }
+/** url undefined: still loading, null: the file is gone. */
+export type BackdropNodeData = { url?: string | null; opacity: number; unlocked: boolean }
 
 export type HostFlowNode = Node<HostNodeData, 'host'>
 export type LabelFlowNode = Node<LabelNodeData, 'label'>
 export type SheetFlowNode = Node<SheetNodeData, 'sheet'>
 export type ZoneFlowNode = Node<ZoneNodeData, 'zone'>
-export type MapFlowNode = HostFlowNode | LabelFlowNode | SheetFlowNode | ZoneFlowNode
+export type BackdropFlowNode = Node<BackdropNodeData, 'backdrop'>
+export type MapFlowNode = HostFlowNode | LabelFlowNode | SheetFlowNode | ZoneFlowNode | BackdropFlowNode
 
 /** Handles on all four sides; ConnectionMode.Loose lets any of them start or end a link. */
 function Handles() {
@@ -45,7 +50,7 @@ export function HostNode({ data, selected }: NodeProps<HostFlowNode>) {
       </div>
       <div className="map-node__text">
         <div className="map-node__name">{data.name}</div>
-        <div className="map-node__addr mono">{data.address}</div>
+        <div className="map-node__addr mono" title={data.more ? `У хоста ещё ${data.more} адр.; показан тот, что ответил` : undefined}>{data.address}{data.more ? ` +${data.more}` : ''}</div>
         <div className="map-node__metrics">
           {h === 'down' ? <span className="bad">недоступен</span> : h === 'up' ? <span>{formatRtt(data.status?.rtt) ?? 'SNMP ok'}</span> : <span>не проверен</span>}
           {t !== undefined && <span className={t >= 70 ? 'bad' : t >= 55 ? 'warn' : ''}>{Math.round(t)}°</span>}
@@ -105,4 +110,19 @@ export function ZoneNode({ data, selected }: NodeProps<ZoneFlowNode>) {
   )
 }
 
-export const nodeTypes = { host: HostNode, label: LabelNode, sheet: SheetNode, zone: ZoneNode }
+/**
+ * The sheet's backdrop picture (floor plan, site photo) under everything. Locked, it lets every
+ * click through to the sheet; unlocked, it is dragged and resized (keeping its proportions) like a zone.
+ */
+export function BackdropNode({ data, selected }: NodeProps<BackdropFlowNode>) {
+  return (
+    <>
+      <NodeResizer isVisible={selected && data.unlocked} minWidth={80} minHeight={60} keepAspectRatio lineClassName="map-zone__line" handleClassName="map-zone__handle" />
+      <div className={`map-backdrop ${data.unlocked ? 'is-unlocked' : ''} ${selected ? 'is-selected' : ''}`} style={{ opacity: data.opacity }}>
+        {data.url ? <img src={data.url} alt="" draggable={false} /> : data.url === null && <span className="map-backdrop__missing">Файл подложки не найден</span>}
+      </div>
+    </>
+  )
+}
+
+export const nodeTypes = { host: HostNode, label: LabelNode, sheet: SheetNode, zone: ZoneNode, backdrop: BackdropNode }

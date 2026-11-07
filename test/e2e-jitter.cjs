@@ -55,7 +55,7 @@ const TERM = (name) => `\x1b[38;2;143;179;217mLinux ${name} 6.1.0-28-amd64\x1b[0
     window.api = {
       // The real save goes through IPC and disk: answer late.
       loadStore: async () => store, saveStore: (s) => new Promise((r) => setTimeout(() => r(JSON.parse(JSON.stringify(Object.assign(store, s)))), 400)), setSecret: async () => store,
-      connect: async () => ({}), scrollback: async () => ({ data: '', end: 0 }), onHostKeyPrompt: on('hk'), answerHostKey() {}, write() {}, broadcast() {}, resize() {}, close() {}, popout() {},
+      connect: async () => ({}), scrollback: async () => ({ data: '', end: 0 }), onStoreChanged: on('store'), onHostKeyPrompt: on('hk'), onHostKeyCancel: on('hkc'), answerHostKey() {}, write() {}, broadcast() {}, resize() {}, close() {}, popout() {},
       setTheme() {}, setChrome() {}, monitorAll: async () => status, monitorProbe() {}, onMonitor: on('mon'),
       openInBrowser: async () => {}, openWinbox: async () => {}, onData: on('ssh:data'), onClosed: on('closed'), onReturned: on('ret'),
       toolStart() {}, toolStop() {}, onToolEvent: on('tool'), dnsQuery: async () => ({ answers: [] }),

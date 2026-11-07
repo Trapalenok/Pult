@@ -2,8 +2,10 @@ import { app, dialog, type BrowserWindow } from 'electron'
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID, scryptSync } from 'crypto'
 import { readFileSync, writeFileSync } from 'fs'
 import { basename, join } from 'path'
-import type { ImportMode, ImportPreview, Store, StoreSnapshot } from '@shared/types'
+import { MAX_ADDRESSES, type Host, type ImportMode, type ImportPreview, type Store, type StoreSnapshot } from '@shared/types'
 import { applyImport, dumpStore, loadStore, type KnownHost } from './json-store'
+import { backgroundsOf, restoreBackgrounds } from './backgrounds'
+import { cleanHostLldp } from '@shared/lldp'
 
 /*
  * Moving the base between PCs and colleagues. safeStorage secrets only decrypt on the machine
@@ -34,6 +36,8 @@ interface ConfigFile {
   store: Store
   knownHosts: Record<string, KnownHost>
   secrets?: SealedSecrets
+  /** Map backdrop pictures by file name, base64. Older files have none. */
+  backgrounds?: Record<string, string>
 }
 
 const KDF = { N: 1 << 15, r: 8, p: 1 }
@@ -78,7 +82,8 @@ export async function exportConfig(win: BrowserWindow | null, password?: string)
     app: app.getVersion(),
     store,
     knownHosts,
-    secrets: password && secrets ? seal(secrets, password) : undefined
+    secrets: password && secrets ? seal(secrets, password) : undefined,
+    backgrounds: backgroundsOf(store)
   }
   writeFileSync(filePath, JSON.stringify(file, null, 2))
   return filePath
@@ -107,13 +112,20 @@ function parse(text: string): ConfigFile {
     throw new Error('Файл повреждён: блок паролей не читается')
   const store: Store = {
     folders: s.folders as Store['folders'],
-    hosts: s.hosts as Store['hosts'],
+    hosts: cleanHostLldp((s.hosts as Host[]).map(cleanAddresses)),
     credentials: (s.credentials ?? []) as Store['credentials'],
     maps: (s.maps ?? []) as Store['maps'],
     workspaces: (hasIds(s.workspaces ?? []) ? s.workspaces ?? [] : []) as Store['workspaces'],
     settings: isObj(s.settings) ? (s.settings as Store['settings']) : undefined
   }
   return { ...(f as unknown as ConfigFile), store, knownHosts: isObj(f.knownHosts) ? (f.knownHosts as ConfigFile['knownHosts']) : {} }
+}
+
+/** Extra addresses come along as they are; anything that is not a list of strings is dropped. */
+function cleanAddresses(h: Host): Host {
+  const { addresses, ...rest } = h
+  const list = Array.isArray(addresses) ? addresses.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map((a) => a.trim()).slice(0, MAX_ADDRESSES - 1) : []
+  return list.length ? { ...rest, addresses: list } : rest
 }
 
 /** Parsed files between preview and apply. Only the latest one is kept. */
@@ -181,18 +193,24 @@ export function merge(cur: Store, next: Store): { store: Store; added: Set<strin
 export function importApply(token: string, mode: ImportMode, password?: string): StoreSnapshot {
   if (!pending || pending.token !== token) throw new Error('Файл больше не открыт, выберите его ещё раз')
   const { file } = pending
+  if (mode !== 'merge' && mode !== 'replace') throw new Error('Неизвестный режим импорта')
+  if (file.secrets && !password) throw new Error('Введите пароль файла, заданный при экспорте. Импорт без расшифровки паролей отменён.')
   let secrets: Record<string, string> = {}
   if (file.secrets && password) secrets = unseal(file.secrets, password)
   const owner = (secretId: string) => secretId.replace(/^snmp:/, '')
   let result: StoreSnapshot
   if (mode === 'replace') {
-    result = applyImport(file.store, file.knownHosts, secrets)
+    // The path of the program Pult starts for WinBox stays this PC's: a file from elsewhere must not pick what runs here.
+    const winboxPath = loadStore().settings?.winboxPath
+    const settings = file.store.settings ? { ...file.store.settings, winboxPath } : undefined
+    result = applyImport({ ...file.store, settings }, file.knownHosts, secrets)
   } else {
     const { store, added } = merge(loadStore(), file.store)
     // A password already set here is never overwritten by one from the file.
     const fresh = Object.fromEntries(Object.entries(secrets).filter(([id]) => added.has(owner(id))))
     result = applyImport(store, file.knownHosts, fresh)
   }
+  restoreBackgrounds(isObj(file.backgrounds) ? file.backgrounds : undefined)
   pending = null
   return result
 }

@@ -3,6 +3,8 @@ node_modules/
 out/
 dist/
 release/
+.build-2012/
+.electron-cache-*/
 *.tsbuildinfo
 
 # ── Установщики (части по 23 МБ, exe, сборщик) ──────
@@ -12,6 +14,25 @@ installer/
 *.blockmap
 *.part[0-9]*
 join-setup*.cmd
+join-portable*.cmd
+# Распакованный рядом с проектом NSIS (nsis-*.7z для сборки без GitHub)
+nsis-*.7z
+/Bin/
+/Contrib/
+/Include/
+/Menu/
+/Plugins/
+/plugins/
+/Stubs/
+/linux/
+/mac/
+/COPYING
+/nsisconf.nsh
+
+# Журнал неудачного рукопожатия (имя и адрес хоста), если его скопировали сюда
+ssh-debug.txt
+# Локальные настройки инструментов
+.claude/
 
 # ── База и секреты Pult ──────────────────────────────
 # Рабочая база живёт в %APPDATA%\ssh-client\store.json, вне проекта.

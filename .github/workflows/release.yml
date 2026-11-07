@@ -1,7 +1,3 @@
-# Сборка установщика Windows и публикация релиза.
-# Запуск: тег vX.Y.Z (git tag v0.3.2 && git push origin v0.3.2)
-# или вручную: Actions → Release → Run workflow. Версия берётся из package.json,
-# тег создаётся сам, если его ещё нет.
 name: Release
 
 on:
@@ -17,27 +13,50 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
           cache: npm
-
+      - name: Check release version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "v$version"
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $tag) {
+            throw "Tag $env:GITHUB_REF_NAME does not match package.json ($tag)"
+          }
+          if (-not (Test-Path ".github/release-notes/$tag.md")) {
+            throw "Missing release notes: .github/release-notes/$tag.md"
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
       - run: npm ci
-
-      - name: Version
-        id: v
-        shell: bash
-        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Build installer
-        run: npx electron-vite build && npx electron-builder --win --x64 --publish never
-
+      - run: npm run typecheck
+      - run: npm run test:transfer
+      - run: npm run test:lldp
+      - run: npm run test:legacy
+      - run: npm run dist:win -- --publish never
+      - run: npm run dist:legacy -- --publish never
+      - name: Verify release files and checksums
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $names = @("Pult-Setup-$v.exe", "Pult-$v-portable.exe", "Pult-Legacy-Setup-$v.exe", "Pult-Legacy-$v-portable.exe")
+          foreach ($name in $names) {
+            if (-not (Test-Path "dist/$name")) { throw "Missing dist/$name" }
+          }
+          $names | ForEach-Object {
+            $hash = (Get-FileHash "dist/$_" -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $_"
+          } | Set-Content -Encoding ascii dist/SHA256SUMS.txt
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.v.outputs.tag }}
-          name: Pult ${{ steps.v.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Pult ${{ steps.version.outputs.tag }}
+          body_path: .github/release-notes/${{ steps.version.outputs.tag }}.md
           files: |
-            dist/*.exe
-          body_path: .github/release-notes/${{ steps.v.outputs.tag }}.md
+            dist/Pult-*.exe
+            dist/SHA256SUMS.txt

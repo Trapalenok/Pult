@@ -37,10 +37,11 @@ export function ContextMenu({ x, y, onClose, className, children }: { x: number;
   )
 }
 
-export function MenuItem({ label, icon, destructive, checked, onSelect }: { label: string; icon?: IconName; destructive?: boolean; checked?: boolean; onSelect(): void }) {
+export function MenuItem({ label, detail, icon, destructive, checked, onSelect }: { label: string; detail?: string; icon?: IconName; destructive?: boolean; checked?: boolean; onSelect(): void }) {
   return (
     <button role="menuitem" className={`ds-menu__item ${destructive ? 'is-destructive' : ''}`} onClick={onSelect}>
       <span>{label}</span>
+      {detail && <small className="ds-menu__detail">{detail}</small>}
       {checked ? <Icon name="check" size={15} /> : icon && <Icon name={icon} size={15} />}
     </button>
   )

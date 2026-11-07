@@ -1,3 +1,5 @@
+import type { LldpSnapshot } from './lldp'
+
 export type AlgoProfile = 'modern' | 'compat' | 'legacy'
 
 /** Accent colours from the design system palette (see design/tokens.css). */
@@ -40,11 +42,36 @@ export interface Host {
   id: string
   folderId: string | null
   name: string
+  /** Main address: tried first, shown everywhere. */
   address: string
+  /**
+   * Up to MAX_ADDRESSES - 1 more addresses of the same device (another VLAN, a management port).
+   * Monitoring pings each one; connecting tries them in turn when the one before does not answer.
+   */
+  addresses?: string[]
   tint?: Tint
   icon?: HostIcon
   overrides: ConnectionDefaults
   privateKeyPath?: string
+  /** Automatic LLDP with the effective SNMP community; on unless false. */
+  lldpAuto?: boolean
+  /** Main-process revision protects background results from stale editor snapshots. */
+  lldpRevision?: number
+  /** Last LLDP snapshot and explicit neighbor bindings. */
+  lldp?: LldpSnapshot
+}
+
+/** Addresses a host may have, the main one included. */
+export const MAX_ADDRESSES = 3
+
+/** The main address, then the extra ones; blanks and repeats dropped. */
+export function hostAddresses(h: Pick<Host, 'address' | 'addresses'>): string[] {
+  const out: string[] = []
+  for (const a of [h.address, ...(h.addresses ?? [])]) {
+    const v = typeof a === 'string' ? a.trim() : ''
+    if (v && !out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v)
+  }
+  return out.slice(0, MAX_ADDRESSES)
 }
 
 /** A saved login. The password lives in the main process under the same id. */
@@ -108,18 +135,53 @@ export interface NetMap {
   links: MapLink[]
   /** Drawn behind the nodes. Older files have none. */
   zones?: MapZone[]
+  /** A picture under everything (floor plan, site photo) to place the hosts on. */
+  background?: MapBackground
 }
+
+/** Sheet coordinates of the picture; the file itself lives in userData/map-backgrounds. */
+export interface MapBackground {
+  file: string
+  x: number
+  y: number
+  w: number
+  h: number
+  /** 0.1–1, default 1. */
+  opacity?: number
+  /** Unlocked: it can be moved and resized like a zone. Locked by default, so clicks go to the sheet. */
+  unlocked?: boolean
+}
+
+/** A backdrop just copied in: its file name and the picture to show. */
+export interface MapBackgroundFile {
+  file: string
+  url: string
+}
+
+/** Two looks: Shellwise (soft, cards) and Ferrum (strict, engineering: flat, 1px rules, tables). */
+export type DesignSystem = 'shellwise' | 'ferrum'
 
 export type ThemeId =
   | 'system' | 'oat' | 'mist' | 'cocoa' | 'midnight' | 'moss' | 'dusk'
+  /** Ferrum themes. */
+  | 'graphite' | 'carbon' | 'blueprint' | 'steel'
   /** Pre-Shellwise themes, kept so old settings load; the renderer maps them to the closest new one. */
   | 'ios-dark' | 'ios-light' | 'termius' | 'nord' | 'solarized-dark' | 'solarized-light' | 'contrast'
 
 export interface AppSettings {
+  /** Shellwise when absent. Each design system has its own themes; `system` follows Windows in both. */
+  design?: DesignSystem
   theme?: ThemeId
   /** Accent colour; each theme has its own default. */
   accent?: Tint
   termFontSize?: number
+  /** Terminal text and background (#rrggbb) over the theme's own, like Termius. */
+  termFg?: string
+  termBg?: string
+  /** Size of cards on the network map: 1 = 100 %. */
+  mapScale?: number
+  /** Host names on the map wrap onto more lines instead of ending in "…". On unless false. */
+  mapFullNames?: boolean
   /** Seconds between ping/SNMP rounds. */
   monitorInterval?: number
   winboxPath?: string
@@ -192,6 +254,8 @@ export interface SessionInfo {
   sessionId: string
   hostId: string
   title: string
+  /** Address the session went to (a host can have several). */
+  address?: string
 }
 
 /** Asked of the user before a host key is trusted (first connect) or when it changed. */
@@ -205,6 +269,8 @@ export interface HostKeyPrompt {
   fingerprint: string
   /** Set when a different key was trusted before: possible man-in-the-middle. */
   previous?: { keyType: string; fingerprint: string; addedAt: string }
+  /** Key types already trusted for this address when this one is a new type (not a changed key). */
+  otherTypes?: string[]
 }
 
 export interface SnmpStatus {
@@ -215,7 +281,11 @@ export interface SnmpStatus {
   uptime?: number
   /** °C, hottest sensor found. */
   temp?: number
+  /** The device answers SNMP but reports no temperature (not every model has a sensor in a known MIB). */
+  noTemp?: boolean
   error?: string
+  /** No answer several rounds in a row: asked only now and then until it answers again. */
+  quiet?: boolean
 }
 
 export interface HostStatus {
@@ -228,6 +298,13 @@ export interface HostStatus {
   history: (number | null)[]
   /** Set when the ping was a TCP connect through the jump host, e.g. "TCP :22 через SOCKS5-прокси". */
   probe?: string
+  /**
+   * Hosts with several addresses: ping of each, in the host's order. alive/rtt/history above are
+   * the host's as a whole (up when any address answers; rtt of the first one that did).
+   */
+  addresses?: { address: string; rtt: number | null }[]
+  /** Address that answered first in the host's order: what connect, web and WinBox use by default. */
+  preferred?: string
   snmp?: SnmpStatus
   checkedAt: number
 }

@@ -1,24 +1,33 @@
 {
   "name": "ssh-client",
-  "version": "0.3.2",
+  "version": "0.5.0",
   "description": "Pult: local network console with SSH, web UI, WinBox, network tools and an encrypted local base",
   "main": "./out/main/index.js",
   "private": true,
   "license": "MIT",
   "scripts": {
+    "test:transfer": "node test/config-transfer.mjs",
+    "test:lldp": "esbuild test/lldp.mjs --bundle --platform=node --format=esm --external:net-snmp --alias:@shared=./src/shared --log-level=warning --outfile=out/test/lldp.mjs && node out/test/lldp.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:linux": "electron-vite build && electron-builder --linux",
+    "dist:legacy": "node scripts/build-2012.mjs",
+    "dist:win2012": "node scripts/build-2012.mjs",
     "test:legacy": "node scripts/electron-node.cjs test/legacy-algorithms.mjs",
     "test:dsa": "node scripts/electron-node.cjs --experimental-strip-types test/dsa-verify.mjs",
     "test:foreign": "node --experimental-strip-types test/foreign-import.mjs",
     "test:tools": "node --experimental-strip-types test/net-tools.mjs",
     "test:socks5": "node --experimental-strip-types test/socks5.mjs",
     "test:inherit": "esbuild test/inherit.mjs --bundle --platform=node --format=esm --alias:@shared=./src/shared --log-level=warning --outfile=out/test/inherit.mjs && node out/test/inherit.mjs",
-    "test:burst": "esbuild test/burst-open.mjs --bundle --platform=node --format=esm --external:ssh2 --log-level=warning --outfile=out/test/burst-open.mjs && node out/test/burst-open.mjs"
+    "test:burst": "esbuild test/burst-open.mjs --bundle --platform=node --format=esm --external:ssh2 --log-level=warning --outfile=out/test/burst-open.mjs && node out/test/burst-open.mjs",
+    "test:addresses": "node --experimental-strip-types test/addresses.mjs",
+    "test:pack": "esbuild test/pack-direct.mjs --bundle --platform=node --format=esm --external:ssh2 --log-level=warning --outfile=out/test/pack-direct.mjs && node out/test/pack-direct.mjs",
+    "test:monitor": "node test/monitor.mjs",
+    "test:reconnect": "esbuild test/reconnect.mjs --bundle --platform=node --format=esm --external:ssh2 --log-level=warning --outfile=out/test/reconnect.mjs && node out/test/reconnect.mjs",
+    "test:login": "esbuild test/login-prompt.mjs --bundle --platform=node --format=esm --external:ssh2 --log-level=warning --outfile=out/test/login-prompt.mjs && node out/test/login-prompt.mjs"
   },
   "dependencies": {
     "net-snmp": "^3.29.2",
@@ -26,6 +35,8 @@
     "ssh2": "^1.17.0"
   },
   "devDependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@fontsource/manrope": "^5.3.0",
     "@types/node": "^22.0.0",

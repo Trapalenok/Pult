@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { StoreSnapshot } from '@shared/types'
+import { hostAddresses, type StoreSnapshot } from '@shared/types'
 import { PORT_NAMES, subnetOf, type DnsResult, type DnsType, type PortState, type ToolEvent, type ToolKind, type ToolParams } from '@shared/tools'
 import { Badge, Button, Segmented, Toggle } from '../design/components'
 import { errorText, newId } from '../util'
@@ -55,11 +55,13 @@ export function ToolsScreen({ store, target }: Props) {
         </div>
       ))}
       <datalist id="tl-hosts">
-        {store.hosts.map((h) => (
-          <option key={h.id} value={h.address}>
-            {h.name}
-          </option>
-        ))}
+        {store.hosts.flatMap((h) =>
+          hostAddresses(h).map((a, i) => (
+            <option key={`${h.id}|${a}`} value={a}>
+              {i ? `${h.name} (адрес ${i + 1})` : h.name}
+            </option>
+          ))
+        )}
       </datalist>
     </div>
   )
@@ -77,7 +79,7 @@ interface HostIndex {
 function useHostIndex(store: StoreSnapshot): HostIndex {
   return useMemo(() => {
     const byName = new Map(store.hosts.map((h) => [h.name.trim().toLowerCase(), h.address]))
-    const byAddr = new Map(store.hosts.map((h) => [h.address.trim().toLowerCase(), h.name]))
+    const byAddr = new Map(store.hosts.flatMap((h) => hostAddresses(h).map((a) => [a.toLowerCase(), h.name] as const)))
     return {
       resolve: (t) => byName.get(t.trim().toLowerCase()) ?? t.trim(),
       nameOf: (a) => (a ? byAddr.get(a.toLowerCase()) : undefined)

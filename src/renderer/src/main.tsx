@@ -3,6 +3,7 @@ import '@xterm/xterm/css/xterm.css'
 import './design/tokens.css'
 import './design/components.css'
 import './app.css'
+import './design/ferrum.css'
 import { App } from './App'
 import { DetachedWindow } from './DetachedWindow'
 
@@ -14,7 +15,7 @@ const sessionId = q.get('session')
 
 createRoot(document.getElementById('root')!).render(
   sessionId ? (
-    <DetachedWindow session={{ sessionId, hostId: q.get('host') ?? '', title: q.get('title') ?? 'SSH' }} />
+    <DetachedWindow session={{ sessionId, hostId: q.get('host') ?? '', title: q.get('title') ?? 'SSH', address: q.get('address') ?? undefined }} />
   ) : (
     <App />
   )

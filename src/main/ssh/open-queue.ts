@@ -40,6 +40,11 @@ export class OpenQueue {
     }
   }
 
+  /** Sessions opening or waiting to open right now. */
+  get busy(): boolean {
+    return this.active > 0 || this.waiting.length > 0
+  }
+
   private async acquire(): Promise<void> {
     if (this.active < this.limit && !this.waiting.length) this.active++
     else await new Promise<void>((r) => this.waiting.push(r))
@@ -62,7 +67,12 @@ export class OpenQueue {
  * (a bare "\r" in it is ssh2's "Invalid header: expected newline") and hang up.
  */
 export function droppedBeforeHandshake(err: unknown): boolean {
-  const e = err as { message?: string; code?: string }
+  const e = err as { message?: string; code?: string; sshHandshakeCompleted?: boolean }
+  // ECONNRESET can also happen after SSH negotiation, for example while a device is
+  // rejecting a login. Retrying those errors here adds both queue backoffs (4.5 s)
+  // before the renderer can make its normal reconnect attempt. SessionManager marks
+  // errors from completed handshakes so only genuinely early drops get this retry.
+  if (e?.sshHandshakeCompleted === true) return false
   if (e?.code === 'ECONNRESET' || e?.code === 'EPIPE') return true
   return /lost before handshake|закрыл соединение|ECONNRESET|socket hang up|invalid header|invalid identification string|max greeting lines/i.test(
     e?.message ?? ''

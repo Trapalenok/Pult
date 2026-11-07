@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { retainLldpBindings } from '@shared/lldp'
 import { effectiveSettings } from '@shared/inherit'
-import type { Host, HostIcon, StoreSnapshot } from '@shared/types'
-import { Button, Field, Group, Row, Sheet } from '../design/components'
+import { MAX_ADDRESSES, type Host, type HostIcon, type StoreSnapshot } from '@shared/types'
+import { Button, Field, Group, IconButton, Row, Sheet, Toggle } from '../design/components'
 import { folderPath, HOST_ICONS, newId } from '../util'
 import { CommunityRow, connectionRows, FolderSelect, IconChoice, inheritedLogin, initialLogin, LoginRows, TintPicker, type LoginDraft } from './fields'
+import { LldpHostSection } from './LldpHostSection'
 
 export interface SecretEdits {
   login: LoginDraft
@@ -25,6 +27,14 @@ export function HostSheet({ store, host, defaultFolderId, onCancel, onSave, onDe
   const [login, setLogin] = useState<LoginDraft>(() => initialLogin(draft.id, draft.overrides, store.secretIds))
   const [community, setCommunity] = useState('')
   const [clearCommunity, setClearCommunity] = useState(false)
+  const liveHost = store.hosts.find((h) => h.id === draft.id)
+  useEffect(() => {
+    if (!liveHost) return
+    setDraft((d) => (d.lldpRevision ?? 0) === (liveHost.lldpRevision ?? 0) ? d : {
+      ...d, lldpRevision: liveHost.lldpRevision,
+      lldp: liveHost.lldp ? retainLldpBindings(liveHost.lldp, d.lldp) : undefined
+    })
+  }, [liveHost?.lldpRevision])
 
   // What the host gets from its folders if a field is left empty.
   const inherited = effectiveSettings(store.folders, { ...draft, overrides: {} })
@@ -32,18 +42,44 @@ export function HostSheet({ store, host, defaultFolderId, onCancel, onSave, onDe
   const snmpOn = draft.overrides.snmp ?? inherited.snmp
   const valid = draft.address.trim().length > 0
 
-  const save = () =>
+  const extra = draft.addresses ?? []
+  const setExtra = (list: string[]) => setDraft({ ...draft, addresses: list })
+
+  const save = () => {
+    const address = draft.address.trim()
+    const more = [...new Set(extra.map((a) => a.trim()).filter((a) => a && a !== address))].slice(0, MAX_ADDRESSES - 1)
+    const { addresses: _old, ...rest } = draft
     onSave(
-      { ...draft, name: draft.name.trim() || draft.address.trim(), address: draft.address.trim() },
+      { ...rest, ...(more.length ? { addresses: more } : {}), name: draft.name.trim() || address, address },
       { login, community: community ? community : clearCommunity ? null : undefined }
     )
+  }
 
   return (
     <Sheet title={host ? 'Изменить хост' : 'Новый хост'} onCancel={onCancel} onDone={save} doneDisabled={!valid} doneLabel={host ? 'Готово' : 'Сохранить'}>
-      <Group>
-        <Row label="Адрес">
+      <Group
+        footer={
+          extra.length
+            ? 'Мониторинг пингует каждый адрес. Подключение, браузер и WinBox идут на первый ответивший по порядку; другой адрес можно выбрать в меню хоста «•••».'
+            : undefined
+        }
+      >
+        <Row label={extra.length ? 'Адрес 1' : 'Адрес'}>
           <Field autoFocus value={draft.address} placeholder="192.168.1.10 или sw-core.corp.local" onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
         </Row>
+        {extra.map((a, i) => (
+          <Row key={i} label={`Адрес ${i + 2}`}>
+            <span className="addr-row">
+              <Field value={a} placeholder="другой адрес этого же устройства" onChange={(e) => setExtra(extra.map((x, j) => (j === i ? e.target.value : x)))} />
+              <IconButton icon="xmark" label="Убрать адрес" onClick={() => setExtra(extra.filter((_, j) => j !== i))} />
+            </span>
+          </Row>
+        ))}
+        {extra.length < MAX_ADDRESSES - 1 && (
+          <Row label="">
+            <Button variant="plain" size="sm" icon="plus" onClick={() => setExtra([...extra, ''])}>Ещё адрес</Button>
+          </Row>
+        )}
         <Row label="Название">
           <Field value={draft.name} placeholder={draft.address || 'sw-core-01'} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
         </Row>
@@ -60,7 +96,7 @@ export function HostSheet({ store, host, defaultFolderId, onCancel, onSave, onDe
         </Row>
       </Group>
 
-      <Group header="Подключение" footer="«Авто» подходит и для нового, и для старого оборудования: сначала современные алгоритмы, при отказе ssh-rsa, SHA-1 и CBC.">
+      <Group header="Подключение" footer="«Авто» подходит для нового и старого оборудования. В профиле «Старые в приоритете» старые шифры и HMAC предпочтительны, а современные методы обмена ключами пробуются первыми для быстрого подключения; старые DH остаются запасным вариантом.">
         {rows.algo}
         {store.settings?.jump?.enabled && rows.jump}
       </Group>
@@ -80,6 +116,13 @@ export function HostSheet({ store, host, defaultFolderId, onCancel, onSave, onDe
           />
         )}
       </Group>
+
+      <Group header="Автоматический LLDP" footer="При включённом SNMP и сохранённом community соседи читаются автоматически раз в 5 минут. Community может наследоваться от папки. Настройка применяется кнопкой «Готово».">
+        <Row label="Обновлять LLDP автоматически">
+          <Toggle checked={draft.lldpAuto !== false} onChange={(lldpAuto) => setDraft((d) => ({ ...d, lldpAuto }))} label="Обновлять LLDP автоматически" />
+        </Row>
+      </Group>
+      <LldpHostSection hostId={draft.id} saved={!!host} value={draft.lldp} store={store} onChange={(lldp) => setDraft((d) => ({ ...d, lldp }))} />
 
       <Group header="Интеграции" footer="В веб-адресе можно использовать {address}, {port}, {name}.">
         {rows.web}

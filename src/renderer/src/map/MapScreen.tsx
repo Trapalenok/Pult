@@ -14,34 +14,36 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { effectiveSettings } from '@shared/inherit'
-import type { HostStatus, LinkShape, MapLink, MapNode, MapZone, NetMap, StoreSnapshot, ZoneShape } from '@shared/types'
-import { Button, EmptyState, Field, Group, IconButton, MenuButton, Row, SearchField, Segmented, Sheet, Tile } from '../design/components'
-import { Icon } from '../design/icons'
-import { folderPath, health, healthSummary, hostIcon, hostTint, newId, TINTS, type Health } from '../util'
+import { hostAddresses, type HostStatus, type MapBackground, type LinkShape, type MapLink, type MapNode, type MapZone, type NetMap, type StoreSnapshot, type ZoneShape } from '@shared/types'
+import { Button, EmptyState, Field, Group, IconButton, MenuButton, openContextMenu, Row, SearchField, Segmented, Sheet, Tile, type MenuItem as MenuEntry } from '../design/components'
+import { Icon, type IconName } from '../design/icons'
+import { errorText, folderPath, health, healthSummary, hostIcon, hostSearchText, hostTint, newId, perAddress, preferredAddress, TINTS, type Health } from '../util'
 import { ContextMenu, LinkPicker, MenuHeader, MenuItem, MenuSeparator, type LinkCandidate } from './ContextMenu'
 import { TintPicker } from '../sheets/fields'
 import { edgeTypes, type LinkFlowEdge } from './edges'
 import { LinkSheet } from './LinkSheet'
 import { nodeTypes, type MapFlowNode } from './nodes'
 import { withShape, ZONE_SHAPES, ZoneSheet } from './ZoneSheet'
+import { ask } from '../design/confirm'
 
 interface Props {
   store: StoreSnapshot
   status: Map<string, HostStatus>
   openCount: Map<string, number>
   onSaveMaps(maps: NetMap[]): void
-  onConnect(hostId: string): void
+  onConnect(hostId: string, address?: string): void
   /** Several hosts at once: opened side by side and grouped for broadcast. */
   /** title: the tab the sessions open in together. */
   onConnectMany(hostIds: string[], title?: string): void
-  onBrowser(hostId: string): void
-  onWinbox(hostId: string): void
-  onTools?(hostId: string): void
+  onBrowser(hostId: string, address?: string): void
+  onWinbox(hostId: string, address?: string): void
+  onTools?(hostId: string, address?: string): void
   onEditHost(hostId: string): void
   /** Icon and colour for several hosts at once. */
   onAppearance(hostIds: string[]): void
   /** Blinking LEDs and traffic along links. */
   animations: boolean
+  onError(title: string, text: string): void
 }
 
 export function MapScreen(p: Props) {
@@ -53,6 +55,9 @@ export function MapScreen(p: Props) {
 }
 
 const DRAG_TYPE = 'application/x-ssh-host'
+/** Node id of the sheet's backdrop picture. */
+const BG_ID = '__backdrop'
+const PALETTE_KEY = 'map.palette.hidden'
 
 function MapWorkspace(p: Props) {
   const { store, status } = p
@@ -101,6 +106,31 @@ function MapWorkspace(p: Props) {
   /** Set by drag stop / resize end; the next render (with final positions) writes them to the store. */
   const [pendingLayout, setPendingLayout] = useState<{ rezone: string[] | 'all' } | null>(null)
   const flow = useReactFlow()
+  /** Host list on the left of the map: can be hidden for more room. Kept across restarts. */
+  const [paletteHidden, setPaletteHidden] = useState(() => {
+    try {
+      return localStorage.getItem(PALETTE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const togglePalette = () =>
+    setPaletteHidden((h) => {
+      try {
+        localStorage.setItem(PALETTE_KEY, h ? '0' : '1')
+      } catch {
+        /* storage unavailable */
+      }
+      return !h
+    })
+  /** Backdrop pictures by file name, loaded once: null when the file is missing. */
+  const [bgUrls, setBgUrls] = useState<Map<string, string | null>>(new Map())
+  const bg = active?.background
+  useEffect(() => {
+    const f = bg?.file
+    if (!f || bgUrls.has(f)) return
+    window.api.loadMapBackground(f).then((url) => setBgUrls((m) => new Map(m).set(f, url)), () => setBgUrls((m) => new Map(m).set(f, null)))
+  }, [bg?.file])
 
   const hostsById = useMemo(() => new Map(store.hosts.map((h) => [h.id, h])), [store.hosts])
 
@@ -113,6 +143,27 @@ function MapWorkspace(p: Props) {
       // Status updates arrive every few seconds; a node being dragged or resized keeps its live place.
       const live = new Map(prev.filter((n) => n.dragging || n.resizing).map((n) => [n.id, n]))
       const zones = active.zones ?? []
+      const b = active.background
+      const backdrop: MapFlowNode[] = b
+        ? [
+            {
+              id: BG_ID,
+              type: 'backdrop',
+              position: { x: b.x, y: b.y },
+              width: b.w,
+              height: b.h,
+              // Under the zones, which are under everything else.
+              zIndex: -2000,
+              selectable: !!b.unlocked,
+              draggable: !!b.unlocked,
+              deletable: false,
+              connectable: false,
+              style: b.unlocked ? undefined : { pointerEvents: 'none' },
+              selected: !!b.unlocked && sel.has(BG_ID),
+              data: { url: bgUrls.get(b.file), opacity: b.opacity ?? 1, unlocked: !!b.unlocked }
+            }
+          ]
+        : []
       const zoneById = new Map(zones.map((z) => [z.id, z]))
       const zoneNodes = zones.map((z): MapFlowNode => {
         const inside = active.nodes.filter((n) => n.zoneId === z.id && n.hostId).map((n) => n.hostId!)
@@ -147,7 +198,8 @@ function MapWorkspace(p: Props) {
           selected: sel.has(n.id),
           data: {
             name: h.name,
-            address: h.address,
+            address: preferredAddress(h, status.get(h.id)),
+            more: hostAddresses(h).length - 1,
             tint: hostTint(store, h),
             icon: hostIcon(store, h),
             status: status.get(h.id),
@@ -162,9 +214,9 @@ function MapWorkspace(p: Props) {
       })
       // Parents must come before their children.
       const prevById = new Map(prev.map((n) => [n.id, n]))
-      const next = [...zoneNodes, ...placed].map((fn): MapFlowNode => {
+      const next = [...backdrop, ...zoneNodes, ...placed].map((fn): MapFlowNode => {
         const l = live.get(fn.id)
-        if (l) return { ...fn, position: l.position, parentId: l.parentId, ...(fn.type === 'zone' ? { width: l.width, height: l.height } : {}), measured: l.measured, dragging: l.dragging, resizing: l.resizing } as MapFlowNode
+        if (l) return { ...fn, position: l.position, parentId: l.parentId, ...(fn.type === 'zone' || fn.type === 'backdrop' ? { width: l.width, height: l.height } : {}), measured: l.measured, dragging: l.dragging, resizing: l.resizing } as MapFlowNode
         const old = prevById.get(fn.id)
         if (!old) return fn
         // The same node as before keeps its object, so React Flow neither re-renders nor re-measures it;
@@ -174,7 +226,7 @@ function MapWorkspace(p: Props) {
       })
       return next.length === prev.length && next.every((n, i) => n === prev[i]) ? prev : next
     })
-  }, [active, hostsById, status, store, p.openCount, maps])
+  }, [active, hostsById, status, store, p.openCount, maps, bgUrls])
 
   // A freshly opened sheet gets fresh numbers instead of waiting for the next round.
   useEffect(() => {
@@ -289,7 +341,7 @@ function MapWorkspace(p: Props) {
     const src = active.nodes.find((n) => n.id === nodeId)
     if (!src) return
     // Free spots nearest to the node, right-hand side first, so new hosts never cover existing ones.
-    const taken = nodes.filter((n) => n.type !== 'zone').map((n) => ({ ...absolute.get(n.id)!, w: n.measured?.width ?? 200, h: n.measured?.height ?? 70 }))
+    const taken = nodes.filter((n) => n.type !== 'zone' && n.type !== 'backdrop').map((n) => ({ ...absolute.get(n.id)!, w: n.measured?.width ?? 200, h: n.measured?.height ?? 70 }))
     const cells: { x: number; y: number; d: number }[] = []
     for (let dx = -6; dx <= 6; dx++) for (let dy = -8; dy <= 8; dy++) if (dx || dy) cells.push({ x: src.x + dx * 260, y: src.y + dy * 110, d: Math.abs(dx) + Math.abs(dy) * 0.6 + (dx < 0 ? 0.5 : 0) })
     cells.sort((a, b) => a.d - b.d)
@@ -339,8 +391,8 @@ function MapWorkspace(p: Props) {
       })
   }
 
-  const deleteSheet = (sheet: NetMap) => {
-    if (!confirm(`Удалить лист «${sheet.name}» и все вложенные в него листы?`)) return
+  const deleteSheet = async (sheet: NetMap) => {
+    if (!(await ask(`Удалить лист «${sheet.name}» и все вложенные в него листы?`, { ok: 'Удалить', destructive: true }))) return
     p.onSaveMaps(withoutSheets(maps, [sheet.id]))
     setActiveId(sheet.parentId ?? tabs.find((t) => t.id !== sheet.id)?.id ?? null)
   }
@@ -362,15 +414,16 @@ function MapWorkspace(p: Props) {
     if (removed.length) removeNodes(removed)
     // A finished resize of a zone: save it and let nodes now inside it join (and those outside leave).
     if (changes.some((c) => c.type === 'dimensions' && c.resizing === false && zoneIds.has(c.id))) setPendingLayout({ rezone: 'all' })
+    else if (changes.some((c) => c.type === 'dimensions' && c.resizing === false && c.id === BG_ID)) setPendingLayout({ rezone: [] })
   }
 
-  const removeNodes = (ids: string[]) => {
+  const removeNodes = async (ids: string[]) => {
     if (!active) return
     // A removed zone lets its nodes go: they stay on the sheet where they are.
     const zoneGone = new Set(ids.filter((id) => active.zones?.some((z) => z.id === id)))
     const gone = new Set(ids.filter((id) => !zoneGone.has(id)))
     const sheets = active.nodes.filter((n) => gone.has(n.id) && n.sheetId).map((n) => n.sheetId!)
-    if (sheets.length && !confirm(`Вместе с узлом удалится вложенный лист (${sheets.map((id) => maps.find((m) => m.id === id)?.name).join(', ')}) со всем содержимым. Удалить?`)) return
+    if (sheets.length && !(await ask(`Вместе с узлом удалится вложенный лист (${sheets.map((id) => maps.find((m) => m.id === id)?.name).join(', ')}) со всем содержимым. Удалить?`, { ok: 'Удалить', destructive: true }))) return
     const next = maps.map((m) =>
       m.id === active.id
         ? {
@@ -401,8 +454,10 @@ function MapWorkspace(p: Props) {
   const persistLayout = (rezone: string[] | 'all') => {
     const byId = new Map(nodes.map((n) => [n.id, n]))
     const check = (id: string) => rezone === 'all' || rezone.includes(id)
+    const fb = byId.get(BG_ID)
     updateMap((m) => ({
       ...m,
+      background: m.background && fb ? { ...m.background, x: Math.round(fb.position.x), y: Math.round(fb.position.y), w: Math.round(fb.width ?? m.background.w), h: Math.round(fb.height ?? m.background.h) } : m.background,
       zones: (m.zones ?? []).map((z) => {
         const f = byId.get(z.id)
         return f ? { ...z, x: Math.round(f.position.x), y: Math.round(f.position.y), w: Math.round(f.width ?? z.w), h: Math.round(f.height ?? z.h) } : z
@@ -421,7 +476,7 @@ function MapWorkspace(p: Props) {
     setPendingLayout(null)
     persistLayout(pendingLayout.rezone)
   }, [pendingLayout])
-  const onDragStop = (_e: unknown, _n: unknown, dragged: MapFlowNode[]) => setPendingLayout({ rezone: dragged.filter((n) => n.type !== 'zone').map((n) => n.id) })
+  const onDragStop = (_e: unknown, _n: unknown, dragged: MapFlowNode[]) => setPendingLayout({ rezone: dragged.filter((n) => n.type !== 'zone' && n.type !== 'backdrop').map((n) => n.id) })
 
   /** Default size of a new zone. */
   const ZONE_SIZE: Record<ZoneShape, { w: number; h: number }> = { rect: { w: 560, h: 340 }, square: { w: 400, h: 400 }, circle: { w: 420, h: 420 } }
@@ -482,11 +537,54 @@ function MapWorkspace(p: Props) {
     window.api.monitorProbe([hostId])
   }
 
+  /** A picture under the sheet: placed in the middle of the view, at its own size (at most 2400 px wide), ready to be moved. */
+  const pickBackdrop = async () => {
+    if (!active) return
+    try {
+      const got = await window.api.pickMapBackground()
+      if (!got) return
+      const img = new Image()
+      img.src = got.url
+      await img.decode()
+      const k = Math.min(1, 2400 / Math.max(1, img.naturalWidth))
+      const w = Math.round(img.naturalWidth * k) || 1200
+      const h = Math.round(img.naturalHeight * k) || 800
+      const c = flow.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+      setBgUrls((m) => new Map(m).set(got.file, got.url))
+      const old = active.background
+      updateMap((m) => ({ ...m, background: old ? { ...old, file: got.file, h: Math.round((old.w * h) / w), unlocked: true } : { file: got.file, x: Math.round(c.x - w / 2), y: Math.round(c.y - h / 2), w, h, unlocked: true } }))
+      if (!old) setTimeout(() => flow.fitView({ padding: 0.1, duration: 300 }), 50)
+    } catch (e) {
+      p.onError('Не удалось загрузить подложку', errorText(e))
+    }
+  }
+  const setBackdrop = (patch: Partial<MapBackground>) => updateMap((m) => (m.background ? { ...m, background: { ...m.background, ...patch } } : m))
+  const removeBackdrop = async () => {
+    if (await ask('Убрать подложку с листа? Хосты останутся на местах.', { ok: 'Убрать', destructive: true })) updateMap(({ background: _b, ...m }) => m)
+  }
+  const backdropMenu = (): MenuEntry[] =>
+    !bg
+      ? [{ label: 'Подложка: загрузить картинку…', icon: 'image', onSelect: pickBackdrop }]
+      : [
+          { label: bg.unlocked ? 'Закрепить подложку' : 'Двигать и менять размер подложки', icon: bg.unlocked ? 'lock' : 'select', onSelect: () => setBackdrop({ unlocked: !bg.unlocked }) },
+          { label: 'Заменить картинку…', icon: 'image', onSelect: pickBackdrop },
+          ...[1, 0.7, 0.4].map((o) => ({ label: `Прозрачность подложки: ${Math.round((1 - o) * 100)}%`, icon: (Math.abs((bg.opacity ?? 1) - o) < 0.05 ? 'check' : 'eye') as IconName, onSelect: () => setBackdrop({ opacity: o }) })),
+          { label: 'Убрать подложку', icon: 'trash', destructive: true, onSelect: removeBackdrop }
+        ]
+
   const selectedHosts = selected.map(nodeHost).filter((x): x is string => !!x)
+  /** Context menu entries for a host action: one per address when the host has several. */
+  const hostItems = (hostId: string, item: { label: string; icon: IconName }, run: (address?: string) => void) => {
+    const h = hostsById.get(hostId)
+    if (!h) return null
+    return perAddress(h, status.get(hostId), item, run).map((it) => (
+      <MenuItem key={`${it.label}|${it.detail ?? ''}`} label={it.label} detail={it.detail} icon={it.icon} onSelect={() => (setMenu(null), it.onSelect())} />
+    ))
+  }
   const menuZone = menu ? active?.zones?.find((z) => z.id === menu.nodeId) : undefined
   const onMap = new Set(active?.nodes.map((n) => n.hostId))
   const palette = store.hosts
-    .filter((h) => `${h.name} ${h.address}`.toLowerCase().includes(query.trim().toLowerCase()))
+    .filter((h) => hostSearchText(h).includes(query.trim().toLowerCase()))
     .sort((a, b) => Number(onMap.has(a.id)) - Number(onMap.has(b.id)) || a.name.localeCompare(b.name))
   const sum = healthSummary(active ? sheetHosts(active.id) : [], status)
   const menuSheet = menu ? nodeSheet(menu.nodeId) : undefined
@@ -498,7 +596,7 @@ function MapWorkspace(p: Props) {
       if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyA' || (e.target as HTMLElement).closest('input, textarea, select, [role="dialog"]')) return
       if (!(e.target as HTMLElement).closest('.map-canvas') && document.activeElement !== document.body) return
       e.preventDefault()
-      selectOnly(nodes.filter((n) => n.type !== 'zone').map((n) => n.id))
+      selectOnly(nodes.filter((n) => n.type !== 'zone' && n.type !== 'backdrop').map((n) => n.id))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -523,7 +621,12 @@ function MapWorkspace(p: Props) {
                 onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && (e.target as HTMLInputElement).blur()}
               />
             ) : (
-              <button key={m.id} role="tab" aria-selected={m.id === trail[0]?.id} className={`tab ${m.id === trail[0]?.id ? 'is-active' : ''}`} onClick={() => setActiveId(m.id)} onDoubleClick={() => setRenaming(m.id)}>
+              <button key={m.id} role="tab" aria-selected={m.id === trail[0]?.id} className={`tab ${m.id === trail[0]?.id ? 'is-active' : ''}`} onClick={() => setActiveId(m.id)} onDoubleClick={() => setRenaming(m.id)} onContextMenu={(e) => openContextMenu(e, [
+                { label: 'Открыть', icon: 'map', onSelect: () => setActiveId(m.id) },
+                { label: 'Переименовать', icon: 'pencil', onSelect: () => setRenaming(m.id) },
+                { label: 'Новый лист', icon: 'plus', onSelect: addSheet },
+                { label: 'Удалить лист', icon: 'trash', destructive: true, sep: true, onSelect: () => deleteSheet(m) }
+              ], m.name)}>
                 <Icon name="map" size={14} />
                 <span className="tab__title">{m.name}</span>
               </button>
@@ -547,6 +650,11 @@ function MapWorkspace(p: Props) {
               {selectedHosts.length === 1 ? 'Подключиться' : `Подключиться к ${selectedHosts.length}`}
             </Button>
           )}
+          {bg?.unlocked && (
+            <Button variant="tinted" icon="lock" onClick={() => setBackdrop({ unlocked: false })}>Закрепить подложку</Button>
+          )}
+          {active && <IconButton icon="image" label={bg ? 'Подложка листа' : 'Загрузить подложку (план, схема, фото)'} onClick={(e) => (bg ? openContextMenu(e, backdropMenu(), 'Подложка') : pickBackdrop())} />}
+          {active && <IconButton icon="sidebar" label={paletteHidden ? 'Показать список хостов' : 'Скрыть список хостов'} active={paletteHidden} onClick={togglePalette} />}
           {active && <IconButton icon="select" label={boxMode ? 'Рамка выделения включена: тяните по листу, средняя кнопка двигает лист' : 'Рамка выделения (или тяните с Shift)'} active={boxMode} onClick={() => setBoxMode(!boxMode)} />}
           {active && (
             <MenuButton
@@ -563,7 +671,8 @@ function MapWorkspace(p: Props) {
                 { label: 'Вложенный лист', icon: 'map', onSelect: addChildSheet },
                 { label: 'Добавить зону', icon: 'zone', onSelect: () => addZone('rect') },
                 { label: 'Добавить подпись', icon: 'textNode', onSelect: () => addNode({ label: 'Подпись', ...flow.screenToFlowPosition({ x: 400, y: 200 }) }) },
-                { label: 'Удалить лист', icon: 'trash', destructive: true, onSelect: () => deleteSheet(active) }
+                ...backdropMenu().map((it, i) => ({ ...it, sep: i === 0 })),
+                { label: 'Удалить лист', icon: 'trash', destructive: true, sep: true, onSelect: () => deleteSheet(active) }
               ]}
             />
           )}
@@ -578,7 +687,7 @@ function MapWorkspace(p: Props) {
           action={<Button variant="filled" icon="plus" onClick={addSheet}>Создать лист</Button>}
         />
       ) : (
-        <div className="map-layout">
+        <div className={`map-layout ${paletteHidden ? 'no-palette' : ''}`}>
           {trail.length > 1 && (
             <nav className="map-trail" aria-label="Путь по листам">
               {trail.map((m, i) => (
@@ -601,7 +710,7 @@ function MapWorkspace(p: Props) {
               ))}
             </nav>
           )}
-          <aside className="map-palette">
+          {!paletteHidden && <aside className="map-palette">
             <SearchField value={query} onChange={setQuery} placeholder="Найти хост" />
             <p className="muted">Перетащите на лист</p>
             <div className="map-palette__list">
@@ -619,7 +728,7 @@ function MapWorkspace(p: Props) {
                 </div>
               ))}
             </div>
-          </aside>
+          </aside>}
           <div className={`map-canvas ${p.animations ? 'is-animated' : ''} ${boxMode ? 'is-box-select' : ''}`} onDragOver={(e) => (e.preventDefault(), (e.dataTransfer.dropEffect = 'copy'))} onDrop={onDrop}>
             <ReactFlow<MapFlowNode>
               nodes={nodes}
@@ -651,6 +760,7 @@ function MapWorkspace(p: Props) {
               }}
               onEdgeDoubleClick={(_e, edge) => setEditingLink(active.links.find((l) => l.id === edge.id) ?? null)}
               onNodeDoubleClick={(_e, n) => {
+                if (n.id === BG_ID) return
                 const z = active.zones?.find((x) => x.id === n.id)
                 if (z) return setEditingZone(z)
                 const h = nodeHost(n.id)
@@ -659,7 +769,7 @@ function MapWorkspace(p: Props) {
                 else if (sh) setActiveId(sh)
                 else setLabelEdit({ nodeId: n.id, text: active.nodes.find((x) => x.id === n.id)?.label ?? '' })
               }}
-              onNodeContextMenu={(e, n) => (e.preventDefault(), setEdgeMenu(null), setPaneMenu(null), setMenu({ x: e.clientX, y: e.clientY, nodeId: n.id }))}
+              onNodeContextMenu={(e, n) => (e.preventDefault(), setEdgeMenu(null), setPaneMenu(null), n.id === BG_ID ? (setMenu(null), openContextMenu(e, backdropMenu(), 'Подложка')) : setMenu({ x: e.clientX, y: e.clientY, nodeId: n.id }))}
               onEdgeContextMenu={(e, edge) => (e.preventDefault(), setMenu(null), setPaneMenu(null), setEdgeMenu({ x: e.clientX, y: e.clientY, linkId: edge.id }))}
               onPaneContextMenu={(e) => (e.preventDefault(), setMenu(null), setEdgeMenu(null), setPaneMenu({ x: e.clientX, y: e.clientY }))}
               onPaneClick={() => (setMenu(null), setEdgeMenu(null), setPaneMenu(null))}
@@ -680,7 +790,7 @@ function MapWorkspace(p: Props) {
               <Controls showInteractive={false} />
               <MiniMap pannable zoomable nodeClassName={(n) => `minimap-node ${n.type === 'zone' ? 'is-zone' : n.type === 'host' ? `is-${health((n.data as { status?: HostStatus }).status)}` : ''}`} />
             </ReactFlow>
-            <div className="map-hint muted">Правый клик: меню, связи, зоны · Двойной клик: подключиться или открыть · Ctrl + клик или Shift + рамка: несколько, тяните вместе · Delete: убрать</div>
+            <div className="map-hint muted">Правый клик: меню, связи, зоны, подложка · Двойной клик: подключиться или открыть · Ctrl + клик или Shift + рамка: несколько, тяните вместе · Delete: убрать</div>
             {menu && menuNode && menu.pick && (
               <ContextMenu x={menu.x} y={menu.y} className="map-context--picker" onClose={() => setMenu(null)}>
                 <LinkPicker from={nodeTitle(menu.nodeId)} candidates={linkCandidates(menu.nodeId)} onCancel={() => setMenu(null)} onPick={(keys) => (setMenu(null), linkTo(menu.nodeId, keys))} />
@@ -732,6 +842,10 @@ function MapWorkspace(p: Props) {
                     addNode({ label: 'Подпись', x: Math.round(at.x), y: Math.round(at.y) })
                   }}
                 />
+                <MenuSeparator />
+                {backdropMenu().map((it) => (
+                  <MenuItem key={it.label} label={it.label} icon={it.icon} destructive={it.destructive} onSelect={() => (setPaneMenu(null), it.onSelect())} />
+                ))}
               </ContextMenu>
             )}
             {menu && menuNode && !menu.pick && (
@@ -755,15 +869,13 @@ function MapWorkspace(p: Props) {
                 <MenuSeparator />
                 {menuHost && (
                   <>
-                    <MenuItem label="Подключиться" icon="terminal" onSelect={() => (setMenu(null), p.onConnect(menuHost))} />
+                    {hostItems(menuHost, { label: 'Подключиться', icon: 'terminal' }, (a) => p.onConnect(menuHost, a))}
                     {selectedHosts.length > 1 && (
                       <MenuItem label={`Подключиться к выбранным (${selectedHosts.length})`} icon="grid" onSelect={() => (setMenu(null), p.onConnectMany(selectedHosts, `${active?.name ?? 'Карта'}: выбранные`))} />
                     )}
-                    <MenuItem label="Открыть в браузере" icon="globe" onSelect={() => (setMenu(null), p.onBrowser(menuHost))} />
-                    {hostsById.get(menuHost) && effectiveSettings(store.folders, hostsById.get(menuHost)!).winbox && (
-                      <MenuItem label="Открыть в WinBox" icon="winbox" onSelect={() => (setMenu(null), p.onWinbox(menuHost))} />
-                    )}
-                    {p.onTools && <MenuItem label="Сетевые инструменты" icon="wrench" onSelect={() => (setMenu(null), p.onTools!(menuHost))} />}
+                    {hostItems(menuHost, { label: 'Открыть в браузере', icon: 'globe' }, (a) => p.onBrowser(menuHost, a))}
+                    {hostsById.get(menuHost) && effectiveSettings(store.folders, hostsById.get(menuHost)!).winbox && hostItems(menuHost, { label: 'Открыть в WinBox', icon: 'winbox' }, (a) => p.onWinbox(menuHost, a))}
+                    {p.onTools && <MenuItem label="Сетевые инструменты" icon="wrench" onSelect={() => (setMenu(null), p.onTools!(menuHost, preferredAddress(hostsById.get(menuHost)!, status.get(menuHost))))} />}
                     <MenuItem label="Изменить хост" icon="pencil" onSelect={() => (setMenu(null), p.onEditHost(menuHost))} />
                     <MenuItem
                       label={selectedHosts.length > 1 && selectedHosts.includes(menuHost) ? `Значок и цвет (${selectedHosts.length})…` : 'Значок и цвет…'}
@@ -870,6 +982,7 @@ function sameNode(a: MapFlowNode, b: MapFlowNode): boolean {
     a.width === b.width &&
     a.height === b.height &&
     a.dragHandle === b.dragHandle &&
+    a.draggable === b.draggable &&
     shallowEqual(a.data, b.data)
   )
 }
