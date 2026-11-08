@@ -3,8 +3,6 @@ name: Release
 on:
   push:
     tags: ['v*']
-    branches: ['main']
-    paths: ['.github/release-notes/v0.5.0.md']
   workflow_dispatch:
 
 permissions:
