@@ -13,9 +13,10 @@ export function HostKeySheet({ prompt, queued, onAnswer, onTrustAllNew }: {
   onTrustAllNew(): void
 }) {
   const changed = !!prompt.previous
+  const rdp = prompt.protocol === 'rdp'
   return (
     <Sheet
-      title={changed ? 'Ключ хоста изменился' : 'Новый хост'}
+      title={rdp ? changed ? 'Сертификат RDP изменился' : 'Новый сертификат RDP' : changed ? 'Ключ хоста изменился' : 'Новый хост'}
       onCancel={() => onAnswer(false)}
       onDone={() => onAnswer(true)}
       doneLabel={changed ? 'Всё равно доверять' : 'Доверять'}
@@ -24,10 +25,10 @@ export function HostKeySheet({ prompt, queued, onAnswer, onTrustAllNew }: {
       {changed ? (
         <div className="sheet-banner">
           <Banner title="Возможна подмена устройства">
-            Ключ {prompt.hostName} не совпадает с сохранённым. Так бывает после замены коммутатора или сброса конфигурации, но так же выглядит и перехват соединения. Подключайтесь, только если знаете причину.
+            {rdp ? 'Сертификат' : 'Ключ'} {prompt.hostName} не совпадает с сохранённым. Так бывает после замены сервера или сертификата, но так же выглядит и перехват соединения. Подключайтесь, только если знаете причину.
           </Banner>
         </div>
-      ) : prompt.otherTypes?.length ? (
+      ) : !rdp && prompt.otherTypes?.length ? (
         <p className="sheet-lead">
           <b>{prompt.hostName}</b> предложил ключ другого типа: <span className="mono">{prompt.keyType}</span> вместо
           сохранённого <span className="mono">{prompt.otherTypes.join(', ')}</span>. Так бывает при смене профиля алгоритмов,
@@ -36,8 +37,9 @@ export function HostKeySheet({ prompt, queued, onAnswer, onTrustAllNew }: {
         </p>
       ) : (
         <p className="sheet-lead">
-          Вы подключаетесь к <b>{prompt.hostName}</b> впервые. Сверьте отпечаток с выводом на устройстве
-          (<span className="mono">display ssh server-info</span> / <span className="mono">/ip ssh print</span>) и подтвердите.
+          Вы подключаетесь к <b>{prompt.hostName}</b> впервые. {rdp
+            ? 'Сверьте отпечаток TLS-сертификата с данными сервера и подтвердите.'
+            : <>Сверьте отпечаток с выводом на устройстве (<span className="mono">display ssh server-info</span> / <span className="mono">/ip ssh print</span>) и подтвердите.</>}
         </p>
       )}
       <Group>

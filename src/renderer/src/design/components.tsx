@@ -264,7 +264,11 @@ let showContext: ((m: { x: number; y: number; title?: string; items: MenuItem[] 
 export function openContextMenu(e: ReactMouseEvent, items: MenuItem[], title?: string): void {
   e.preventDefault()
   e.stopPropagation()
-  if (items.length) showContext?.({ x: e.clientX, y: e.clientY, title, items })
+  openActionMenu(e.clientX, e.clientY, items, title)
+}
+
+export function openActionMenu(x: number, y: number, items: MenuItem[], title?: string): void {
+  if (items.length) showContext?.({ x, y, title, items })
 }
 
 /** Rendered once in the window; openContextMenu() shows its menu here. */

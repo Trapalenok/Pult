@@ -1,12 +1,13 @@
 {
   "name": "ssh-client",
-  "version": "0.5.0",
+  "version": "0.6.1",
   "description": "Pult: local network console with SSH, web UI, WinBox, network tools and an encrypted local base",
   "main": "./out/main/index.js",
   "private": true,
   "license": "MIT",
   "scripts": {
     "test:transfer": "node test/config-transfer.mjs",
+    "test:remote": "esbuild src/main/integrations/mstsc.ts src/renderer/src/VncChannel.ts --bundle --platform=node --format=cjs --outdir=out/test --out-extension:.js=.cjs && node test/direct-remote.mjs",
     "test:lldp": "esbuild test/lldp.mjs --bundle --platform=node --format=esm --external:net-snmp --alias:@shared=./src/shared --log-level=warning --outfile=out/test/lldp.mjs && node out/test/lldp.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -30,6 +31,7 @@
     "test:login": "esbuild test/login-prompt.mjs --bundle --platform=node --format=esm --external:ssh2 --log-level=warning --outfile=out/test/login-prompt.mjs && node out/test/login-prompt.mjs"
   },
   "dependencies": {
+    "@novnc/novnc": "^1.7.0",
     "net-snmp": "^3.29.2",
     "sql.js": "^1.14.2",
     "ssh2": "^1.17.0"
@@ -65,6 +67,7 @@
     },
     "files": [
       "out/**/*",
+      "!out/test/**",
       "!**/node_modules/**/build/Release/**",
       "!**/node_modules/**/*.node"
     ],

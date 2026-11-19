@@ -197,7 +197,7 @@ export function importApply(token: string, mode: ImportMode, password?: string):
   if (file.secrets && !password) throw new Error('Введите пароль файла, заданный при экспорте. Импорт без расшифровки паролей отменён.')
   let secrets: Record<string, string> = {}
   if (file.secrets && password) secrets = unseal(file.secrets, password)
-  const owner = (secretId: string) => secretId.replace(/^snmp:/, '')
+  const owner = (secretId: string) => secretId.replace(/^(snmp|vnc|rdp|rdp-token):/, '')
   let result: StoreSnapshot
   if (mode === 'replace') {
     // The path of the program Pult starts for WinBox stays this PC's: a file from elsewhere must not pick what runs here.

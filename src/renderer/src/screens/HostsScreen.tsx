@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type DragEvent, type MouseEvent } from 'react'
 import { effectiveSettings, folderChain, INHERIT_LABEL, ownFields, resolveLogin } from '@shared/inherit'
 import { hostAddresses, type Folder, type Host, type HostStatus, type StoreSnapshot } from '@shared/types'
-import { Badge, Button, EmptyState, HealthDot, IconButton, MenuButton, openContextMenu, SearchField, Sparkline, StatusDot, Tile, type MenuItem } from '../design/components'
+import { Badge, Button, EmptyState, HealthDot, IconButton, MenuButton, openActionMenu, openContextMenu, SearchField, Sparkline, StatusDot, Tile, type MenuItem } from '../design/components'
 import { Icon } from '../design/icons'
 import { dropTarget, startDrag, type MoveItems } from '../dnd'
 import { addressAlive, folderPath, formatRtt, formatUptime, health, healthSummary, hostIcon, hostSearchText, hostsInSubtree, hostTint, kindMeta, perAddress, preferredAddress, subtreeIds } from '../util'
@@ -29,6 +29,8 @@ interface Props {
   onDeleteItems(hostIds: string[], folderIds: string[]): void
   onBrowser(hostId: string, address?: string): void
   onWinbox(hostId: string, address?: string): void
+  onVnc(hostId: string, address?: string): void
+  onRdp(hostId: string, address?: string): void
   onTools?(hostId: string, address?: string): void
   /** Several hosts at once, side by side and grouped for broadcast. */
   onConnectMany(hostIds: string[]): void
@@ -115,17 +117,31 @@ export function HostsScreen(p: Props) {
   const drop = (target: string | null) => dropTarget(target, p.onMove, setOver)
   const dropCls = (target: string | null) => (over === target ? 'is-drop-target' : '')
 
-  /** Clicked host: highlighted; a double click connects. */
+  /** Clicked host: highlighted; a double click chooses among its enabled protocols. */
   const [focused, setFocused] = useState<string | null>(null)
+
+  const connectionChoices = (h: Host): MenuItem[] => [
+    ...(h.sshEnabled !== false ? [{ label: 'SSH', icon: 'terminal' as const, onSelect: () => p.onConnect(h.id) }] : []),
+    ...(h.remote?.rdp ? [{ label: 'RDP · mstsc', icon: 'pc' as const, onSelect: () => p.onRdp(h.id) }] : []),
+    ...(h.remote?.vnc ? [{ label: 'VNC', icon: 'pc' as const, onSelect: () => p.onVnc(h.id) }] : [])
+  ]
+  const openHost = (h: Host, x: number, y: number) => {
+    const choices = connectionChoices(h)
+    if (choices.length === 1) choices[0].onSelect()
+    else if (choices.length) openActionMenu(x, y, choices, h.name)
+    else p.onEditHost(h)
+  }
 
   const hostMenu = (h: Host): MenuItem[] => {
     const s = effectiveSettings(store.folders, h)
     const st = status.get(h.id)
     const own = ownFields(h.id, h.overrides, store.secretIds)
     return [
-      ...perAddress(h, st, { label: 'Подключиться', icon: 'terminal' }, (a) => p.onConnect(h.id, a)),
+      ...(h.sshEnabled !== false ? perAddress(h, st, { label: 'Открыть SSH', icon: 'terminal' }, (a) => p.onConnect(h.id, a)) : []),
       ...perAddress(h, st, { label: 'Открыть в браузере', icon: 'globe' }, (a) => p.onBrowser(h.id, a)),
       ...(s.winbox ? perAddress(h, st, { label: 'Открыть в WinBox', icon: 'winbox' }, (a) => p.onWinbox(h.id, a)) : []),
+      ...(h.remote?.vnc ? perAddress(h, st, { label: 'Открыть VNC', icon: 'pc' }, (a) => p.onVnc(h.id, a)) : []),
+      ...(h.remote?.rdp ? perAddress(h, st, { label: 'Открыть RDP', icon: 'pc' }, (a) => p.onRdp(h.id, a)) : []),
       ...(p.onTools ? [{ label: 'Сетевые инструменты', icon: 'wrench' as const, onSelect: () => p.onTools!(h.id, preferredAddress(h, st)) }] : []),
       { label: 'Изменить', icon: 'pencil', sep: true, onSelect: () => p.onEditHost(h) },
       { label: 'Значок и цвет', icon: 'palette', onSelect: () => p.onAppearance([], [h.id]) },
@@ -277,11 +293,11 @@ export function HostsScreen(p: Props) {
                     role="button"
                     tabIndex={0}
                     aria-pressed={picked.has(`h:${h.id}`)}
-                    title="Двойной клик: подключиться · Ctrl + клик: выбрать · правый клик: меню"
+                    title="Двойной клик: выбрать подключение · Ctrl + клик: выбрать · правый клик: меню"
                     onClick={(e) => togglePick(e, `h:${h.id}`) || setFocused(h.id)}
-                    onDoubleClick={(e) => !e.ctrlKey && !e.metaKey && p.onConnect(h.id)}
+                    onDoubleClick={(e) => !e.ctrlKey && !e.metaKey && openHost(h, e.clientX, e.clientY)}
                     onContextMenu={(e) => (setFocused(h.id), openContextMenu(e, pickedMenu(`h:${h.id}`) ?? hostMenu(h), h.name))}
-                    onKeyDown={(e) => e.key === 'Enter' && p.onConnect(h.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); openHost(h, r.left + r.width / 2, r.top + r.height / 2) } }}
                   >
                     <div className="card__icon">
                       <Tile tint={hostTint(store, h)} icon={hostIcon(store, h)} />
@@ -293,7 +309,7 @@ export function HostsScreen(p: Props) {
                         {p.connecting.has(h.id) ? <StatusDot state="connecting" /> : open > 0 && <Badge tint="green">SSH</Badge>}
                       </div>
                       <div className={`card__sub mono ${addrs.length > 1 ? 'card__sub--addrs' : ''}`}>
-                        {login.username ? `${login.username}@` : ''}
+                        {h.sshEnabled !== false && login.username ? `${login.username}@` : ''}
                         {addrs.length < 2
                           ? h.address
                           : addrs.map((a, i) => {
@@ -304,7 +320,7 @@ export function HostsScreen(p: Props) {
                                 </span>
                               )
                             })}
-                        {s.port !== 22 ? `:${s.port}` : ''}
+                        {h.sshEnabled !== false && s.port !== 22 ? `:${s.port}` : ''}
                       </div>
                       <div className="card__metrics">
                         {st?.history.length ? (

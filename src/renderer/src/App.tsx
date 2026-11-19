@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { snmpSecretId, type AppSettings, type Credential, type Folder, type Host, type HostKeyPrompt, type HostStatus, type NetMap, type StoreSnapshot, type Workspace } from '@shared/types'
+import { remoteSecretId, snmpSecretId, type AppSettings, type Credential, type Folder, type Host, type HostKeyPrompt, type HostStatus, type NetMap, type StoreSnapshot, type Workspace } from '@shared/types'
 import { Badge, Banner, ContextMenuHost, HealthDot, IconButton, openContextMenu, type MenuItem } from './design/components'
 import { dropTarget, type MoveItems } from './dnd'
 import { Icon, type IconName } from './design/icons'
@@ -147,6 +147,10 @@ export function App() {
     async (hostId: string, groupId?: string, address?: string): Promise<string | Error | null> => {
       const host = store?.hosts.find((h) => h.id === hostId)
       if (!host) return null
+      if (host.sshEnabled === false) {
+        setError({ title: `SSH для ${host.name} отключён`, text: 'Включите SSH в настройках хоста или выберите RDP/VNC.' })
+        return null
+      }
       const key = crypto.randomUUID()
       setPending((p) => [...p, { key, hostId, title: host.name, groupId }])
       setScreen('sessions')
@@ -178,8 +182,12 @@ export function App() {
    * with all of them in a grid, marked for broadcast. Errors are collected into one message.
    */
   const connectMany = async (hostIds: string[], title: string, workspaceId?: string) => {
-    if (hostIds.length === 0) return
-    if (hostIds.length === 1 && !workspaceId) return void connect(hostIds[0])
+    const sshIds = hostIds.filter((id) => store?.hosts.some((h) => h.id === id && h.sshEnabled !== false))
+    if (sshIds.length === 0) {
+      if (hostIds.length) setError({ title: `SSH для «${title}» отключён`, text: 'В выбранных хостах нет включённого SSH.' })
+      return
+    }
+    if (sshIds.length === 1 && !workspaceId) return void connect(sshIds[0])
     const g: SessionGroup = { id: newId(), title, workspaceId }
     setGroups((x) => [...x, g])
     setTabs((t) => [...t, groupKey(g.id)])
@@ -188,12 +196,12 @@ export function App() {
     setScreen('sessions')
     const failed: string[] = []
     // Each session joins the broadcast group as soon as it is up: one unreachable host must not hold the rest back.
-    await Promise.all(hostIds.map(async (h) => {
+    await Promise.all(sshIds.map(async (h) => {
       const r = await connect(h, g.id)
       if (typeof r === 'string') setGroup((gr) => new Set([...gr, r]))
       else if (r instanceof Error) failed.push(`${store?.hosts.find((x) => x.id === h)?.name ?? h}: ${errorText(r)}`)
     }))
-    if (failed.length) setError({ title: `«${title}»: не подключились ${failed.length} из ${hostIds.length}`, text: failed.join('\n') })
+    if (failed.length) setError({ title: `«${title}»: не подключились ${failed.length} из ${sshIds.length}`, text: failed.join('\n') })
   }
 
   // A group whose sessions are all gone (closed, or none connected) loses its tab.
@@ -369,6 +377,9 @@ export function App() {
     if (!store) return
     const { defaults, credentials, ops } = applyLogin(store, host.id, host.overrides, edits.login)
     if (edits.community !== undefined) ops.push([snmpSecretId(host.id), edits.community])
+    if (edits.vnc !== undefined) ops.push([remoteSecretId('vnc', host.id), edits.vnc])
+    if (edits.rdp !== undefined) ops.push([remoteSecretId('rdp', host.id), edits.rdp])
+    if (store.secretIds.includes(`rdp-token:${host.id}`)) ops.push([`rdp-token:${host.id}`, null])
     const h = { ...host, overrides: defaults }
     const exists = store.hosts.some((x) => x.id === h.id)
     await persist({ ...store, credentials, hosts: exists ? store.hosts.map((x) => (x.id === h.id ? h : x)) : [...store.hosts, h] }, ops)
@@ -673,6 +684,8 @@ export function App() {
             onDeleteItems={deleteItems}
             onBrowser={(id, address) => run(window.api.openInBrowser(id, address), 'Не удалось открыть браузер')}
             onWinbox={(id, address) => run(window.api.openWinbox(id, address), 'Не удалось запустить WinBox')}
+            onVnc={(id, address) => run(window.api.openVnc(id, address), 'Не удалось открыть VNC')}
+            onRdp={(id, address) => run(window.api.openRdp(id, address), 'Не удалось открыть RDP')}
             onTools={openTools}
             onConnectMany={(ids) => connectMany(ids, `Выбранные: ${ids.length}`)}
             onAppearance={(folderIds, hostIds) => setEditing({ kind: 'appearance', folderIds, hostIds })}
@@ -728,6 +741,8 @@ export function App() {
             onConnectMany={(ids, title) => connectMany(ids, title ?? 'Карта')}
             onBrowser={(id, address) => run(window.api.openInBrowser(id, address), 'Не удалось открыть браузер')}
             onWinbox={(id, address) => run(window.api.openWinbox(id, address), 'Не удалось запустить WinBox')}
+            onVnc={(id, address) => run(window.api.openVnc(id, address), 'Не удалось открыть VNC')}
+            onRdp={(id, address) => run(window.api.openRdp(id, address), 'Не удалось открыть RDP')}
             onTools={openTools}
             onEditHost={(id) => setEditing({ kind: 'host', host: store.hosts.find((h) => h.id === id) ?? null })}
             onAppearance={(hostIds) => setEditing({ kind: 'appearance', folderIds: [], hostIds })}

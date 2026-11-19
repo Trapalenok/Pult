@@ -4,6 +4,8 @@ out/
 dist/
 release/
 .build-2012/
+.build-modern-*/
+.github-sync/
 .electron-cache-*/
 *.tsbuildinfo
 

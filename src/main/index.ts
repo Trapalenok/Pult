@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, type BrowserWindowConstructorOptions, type WebContents } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, type BrowserWindowConstructorOptions, type WebContents } from 'electron'
 import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { writeFileSync } from 'fs'
+import { Socket } from 'net'
 import { effectiveSettings, renderUrl, resolveLogin, usesJump, snmpCommunityOwner } from '@shared/inherit'
-import { hostAddresses, JUMP_DEFAULT_PORT, snmpSecretId } from '@shared/types'
+import { hostAddresses, JUMP_DEFAULT_PORT, remoteSecretId, snmpSecretId } from '@shared/types'
 import { collectLldp } from './lldp/snmp'
 import { AutomaticLldp } from './lldp/automatic'
 import type { EffectiveSettings, Host, HostKeyPrompt, HostStatus, ForeignOptions, ImportMode, SessionInfo, Store } from '@shared/types'
@@ -20,6 +21,7 @@ import { foreignApply, foreignPick, foreignPlan } from './store/foreign'
 import { loadBackground, pickBackground, pruneBackgrounds } from './store/backgrounds'
 import { openInBrowser } from './integrations/browser'
 import { launchWinbox } from './integrations/winbox'
+import { launchMstsc } from './integrations/mstsc'
 import { Monitor } from './monitor/monitor'
 import { dnsQuery, Tools } from './tools/tools'
 import { isSplash, showSplash } from './splash'
@@ -36,6 +38,8 @@ if (process.platform === 'win32') app.setAppUserModelId('local.sshclient')
 let mainWin: BrowserWindow | null = null
 /** sessionId → its own window, for sessions popped out of the main one. */
 const popouts = new Map<string, BrowserWindow>()
+const vncConfigs = new Map<number, { address: string; port: number; password?: string; username?: string; viewOnly: boolean; title: string }>()
+const vncSockets = new Map<string, { owner: WebContents; socket: Socket }>()
 
 /** Pult's own windows (main and popped-out sessions), not the start-up logo window. */
 const allWindows = () => BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && !isSplash(w))
@@ -180,13 +184,14 @@ function saveHandshakeLog(host: Host, lines: string[]): string | undefined {
  * Keys are kept per type, like OpenSSH: a switch with DSA and RSA keys offers DSA under the
  * "Старые" profile and RSA under the others, and that is a new key to confirm, not a changed one.
  */
-function verifyHostKey(asker: WebContents, host: Host, port: number, blob: Buffer, asked?: string[]): Promise<boolean> {
+function verifyHostKey(asker: WebContents, host: Host, port: number, blob: Buffer, asked?: string[], overrideType?: string): Promise<boolean> {
   const fp = fingerprint(blob)
-  const type = keyType(blob)
+  const type = overrideType ?? keyType(blob)
   const known = getKnownKeys(host.address, port)
   if (known.some((k) => k.fingerprint === fp)) return Promise.resolve(true)
   const previous = known.find((k) => k.keyType === type)
   const prompt: HostKeyPrompt = {
+    protocol: overrideType === 'RDP TLS' ? 'rdp' : 'ssh',
     requestId: randomUUID(),
     hostName: host.name,
     address: host.address,
@@ -204,6 +209,7 @@ function verifyHostKey(asker: WebContents, host: Host, port: number, blob: Buffe
     })
     if (asker.isDestroyed()) return resolve(false)
     asker.send('hostkey:ask', prompt)
+    if (overrideType === 'RDP TLS') BrowserWindow.fromWebContents(asker)?.focus()
   })
 }
 
@@ -386,12 +392,90 @@ function registerIpc(): void {
     const to = await reach(e.sender, host, s, host.address, 8291)
     launchWinbox(path, to.port === 8291 ? to.address : `${to.address}:${to.port}`, login.username, password)
   })
+  ipcMain.handle('host:vnc', async (_e, hostId: string, address?: string) => {
+    const host = pickAddress(hostById(hostId), address)
+    const config = host.remote?.vnc
+    if (!config) throw new Error('VNC для этого хоста не настроен')
+    const port = config.port ?? 5900
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Неверный порт VNC')
+    const win = new BrowserWindow(windowOptions({ width: 1100, height: 760, minWidth: 500, minHeight: 360, title: `${host.name} — VNC` }))
+    const id = win.webContents.id
+    vncConfigs.set(id, {
+      address: host.address, port, password: getSecret(remoteSecretId('vnc', host.id)), username: config.username,
+      viewOnly: !!config.viewOnly, title: `${host.name} — VNC`
+    })
+    win.on('closed', () => {
+      vncConfigs.delete(id)
+      for (const [sessionId, session] of vncSockets) if (session.owner.id === id) {
+        session.socket.destroy()
+        vncSockets.delete(sessionId)
+      }
+    })
+    load(win, { vnc: '1' })
+  })
+  ipcMain.handle('vnc:config', (e) => {
+    const config = vncConfigs.get(e.sender.id)
+    if (!config) throw new Error('Окно VNC не найдено')
+    const { address: _address, port: _port, ...publicConfig } = config
+    return publicConfig
+  })
+  ipcMain.handle('vnc:start', async (e) => {
+    const config = vncConfigs.get(e.sender.id)
+    if (!config) throw new Error('Окно VNC не найдено')
+    const socket = new Socket()
+    socket.setTimeout(10000)
+    socket.pause()
+    const sessionId = randomUUID()
+    vncSockets.set(sessionId, { owner: e.sender, socket })
+    socket.on('data', (data) => { if (!e.sender.isDestroyed()) e.sender.send('vnc:data', sessionId, data) })
+    socket.on('close', () => {
+      vncSockets.delete(sessionId)
+      if (!e.sender.isDestroyed()) e.sender.send('vnc:closed', sessionId)
+    })
+    socket.on('error', () => socket.destroy())
+    socket.on('timeout', () => socket.destroy())
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.once('connect', resolve)
+        socket.once('error', reject)
+        socket.once('timeout', () => reject(new Error('VNC-сервер не ответил за 10 секунд')))
+        socket.connect(config.port, config.address)
+      })
+      return sessionId
+    } catch (error) {
+      socket.destroy()
+      vncSockets.delete(sessionId)
+      throw error
+    }
+  })
+  ipcMain.on('vnc:ready', (e, sessionId: string) => {
+    const session = vncSockets.get(sessionId)
+    if (session?.owner === e.sender) session.socket.resume()
+  })
+  ipcMain.on('vnc:send', (e, sessionId: string, data: ArrayBuffer) => {
+    const session = vncSockets.get(sessionId)
+    if (session?.owner === e.sender && !session.socket.destroyed) session.socket.write(Buffer.from(data))
+  })
+  ipcMain.on('vnc:close', (e, sessionId: string) => {
+    const session = vncSockets.get(sessionId)
+    if (session?.owner === e.sender) session.socket.destroy()
+  })
+  ipcMain.handle('host:rdp', async (_e, hostId: string, address?: string) => {
+    const host = pickAddress(hostById(hostId), address)
+    const config = host.remote?.rdp
+    if (!config) throw new Error('RDP для этого хоста не настроен')
+    const port = config.port ?? 3389
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Неверный порт RDP')
+    const passwordNeedsEntry = await launchMstsc(app.getPath('temp'), host.address, port, config.username, config.domain, getSecret(remoteSecretId('rdp', host.id)))
+    if (passwordNeedsEntry) void dialog.showMessageBox({ type: 'warning', title: 'RDP', message: 'mstsc открыт. Не удалось подставить сохранённый пароль; введите его в окне Windows.' })
+  })
 }
 
 /** Opens an SSH session to the host; with reuseId it is a reconnect of that closed session. */
 async function connectHost(asker: WebContents, hostId: string, cols: number, rows: number, address?: string, reuseId?: string): Promise<SessionInfo> {
   const store = loadStore()
   const host = hostById(hostId)
+  if (host.sshEnabled === false) throw new Error('SSH для этого хоста отключён')
   const s = effectiveSettings(store.folders, host)
   const login = resolveLogin(store.folders, store.credentials, host, store.secretIds)
   const j = jumpFor(host, s)

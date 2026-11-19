@@ -72,8 +72,8 @@ export function loadStore(): StoreSnapshot {
 export function saveStore(next: Store, importing = false): StoreSnapshot {
   const d = read()
   const alive = new Set([...next.folders, ...next.hosts, ...next.credentials].map((x) => x.id))
-  const owner = (secretId: string) => secretId.replace(/^snmp:/, '')
-  const secrets = Object.fromEntries(Object.entries(d.secrets).filter(([id]) => alive.has(owner(id))))
+  const owner = (secretId: string) => secretId.replace(/^(snmp|vnc|rdp|rdp-token):/, '')
+  const secrets = Object.fromEntries(Object.entries(d.secrets).filter(([id]) => !id.startsWith('rdp-token:') && alive.has(owner(id))))
   const previous = new Map(d.hosts.map((h) => [h.id, h]))
   const hosts = cleanHostLldp(next.hosts).map((h) => {
     const old = previous.get(h.id)

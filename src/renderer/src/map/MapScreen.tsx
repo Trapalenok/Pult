@@ -15,7 +15,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { effectiveSettings } from '@shared/inherit'
 import { hostAddresses, type HostStatus, type MapBackground, type LinkShape, type MapLink, type MapNode, type MapZone, type NetMap, type StoreSnapshot, type ZoneShape } from '@shared/types'
-import { Button, EmptyState, Field, Group, IconButton, MenuButton, openContextMenu, Row, SearchField, Segmented, Sheet, Tile, type MenuItem as MenuEntry } from '../design/components'
+import { Button, EmptyState, Field, Group, IconButton, MenuButton, openActionMenu, openContextMenu, Row, SearchField, Segmented, Sheet, Tile, type MenuItem as MenuEntry } from '../design/components'
 import { Icon, type IconName } from '../design/icons'
 import { errorText, folderPath, health, healthSummary, hostIcon, hostSearchText, hostTint, newId, perAddress, preferredAddress, TINTS, type Health } from '../util'
 import { ContextMenu, LinkPicker, MenuHeader, MenuItem, MenuSeparator, type LinkCandidate } from './ContextMenu'
@@ -37,6 +37,8 @@ interface Props {
   onConnectMany(hostIds: string[], title?: string): void
   onBrowser(hostId: string, address?: string): void
   onWinbox(hostId: string, address?: string): void
+  onVnc(hostId: string, address?: string): void
+  onRdp(hostId: string, address?: string): void
   onTools?(hostId: string, address?: string): void
   onEditHost(hostId: string): void
   /** Icon and colour for several hosts at once. */
@@ -573,6 +575,18 @@ function MapWorkspace(p: Props) {
         ]
 
   const selectedHosts = selected.map(nodeHost).filter((x): x is string => !!x)
+  const openHost = (hostId: string, x: number, y: number) => {
+    const h = hostsById.get(hostId)
+    if (!h) return
+    const choices: MenuEntry[] = [
+      ...(h.sshEnabled !== false ? [{ label: 'SSH', icon: 'terminal' as const, onSelect: () => p.onConnect(hostId) }] : []),
+      ...(h.remote?.rdp ? [{ label: 'RDP · mstsc', icon: 'pc' as const, onSelect: () => p.onRdp(hostId) }] : []),
+      ...(h.remote?.vnc ? [{ label: 'VNC', icon: 'pc' as const, onSelect: () => p.onVnc(hostId) }] : [])
+    ]
+    if (choices.length === 1) choices[0].onSelect()
+    else if (choices.length) openActionMenu(x, y, choices, h.name)
+    else p.onEditHost(hostId)
+  }
   /** Context menu entries for a host action: one per address when the host has several. */
   const hostItems = (hostId: string, item: { label: string; icon: IconName }, run: (address?: string) => void) => {
     const h = hostsById.get(hostId)
@@ -646,7 +660,7 @@ function MapWorkspace(p: Props) {
             <Button variant="tinted" icon="palette" onClick={() => p.onAppearance(selectedHosts)}>Значок и цвет</Button>
           )}
           {selectedHosts.length > 0 && (
-            <Button variant="filled" icon="play" onClick={() => (selectedHosts.length === 1 ? p.onConnect(selectedHosts[0]) : p.onConnectMany(selectedHosts, `${active?.name ?? 'Карта'}: выбранные`))}>
+            <Button variant="filled" icon="play" onClick={(e) => (selectedHosts.length === 1 ? openHost(selectedHosts[0], e.clientX, e.clientY) : p.onConnectMany(selectedHosts, `${active?.name ?? 'Карта'}: выбранные`))}>
               {selectedHosts.length === 1 ? 'Подключиться' : `Подключиться к ${selectedHosts.length}`}
             </Button>
           )}
@@ -759,13 +773,13 @@ function MapWorkspace(p: Props) {
                 updateMap((m) => ({ ...m, links: m.links.filter((l) => !gone.has(l.id)) }))
               }}
               onEdgeDoubleClick={(_e, edge) => setEditingLink(active.links.find((l) => l.id === edge.id) ?? null)}
-              onNodeDoubleClick={(_e, n) => {
+              onNodeDoubleClick={(e, n) => {
                 if (n.id === BG_ID) return
                 const z = active.zones?.find((x) => x.id === n.id)
                 if (z) return setEditingZone(z)
                 const h = nodeHost(n.id)
                 const sh = nodeSheet(n.id)
-                if (h) p.onConnect(h)
+                if (h) openHost(h, e.clientX, e.clientY)
                 else if (sh) setActiveId(sh)
                 else setLabelEdit({ nodeId: n.id, text: active.nodes.find((x) => x.id === n.id)?.label ?? '' })
               }}
@@ -869,7 +883,9 @@ function MapWorkspace(p: Props) {
                 <MenuSeparator />
                 {menuHost && (
                   <>
-                    {hostItems(menuHost, { label: 'Подключиться', icon: 'terminal' }, (a) => p.onConnect(menuHost, a))}
+                    {hostsById.get(menuHost)?.sshEnabled !== false && hostItems(menuHost, { label: 'Открыть SSH', icon: 'terminal' }, (a) => p.onConnect(menuHost, a))}
+                    {hostsById.get(menuHost)?.remote?.rdp && hostItems(menuHost, { label: 'Открыть RDP', icon: 'pc' }, (a) => p.onRdp(menuHost, a))}
+                    {hostsById.get(menuHost)?.remote?.vnc && hostItems(menuHost, { label: 'Открыть VNC', icon: 'pc' }, (a) => p.onVnc(menuHost, a))}
                     {selectedHosts.length > 1 && (
                       <MenuItem label={`Подключиться к выбранным (${selectedHosts.length})`} icon="grid" onSelect={() => (setMenu(null), p.onConnectMany(selectedHosts, `${active?.name ?? 'Карта'}: выбранные`))} />
                     )}

@@ -59,6 +59,15 @@ export interface Api {
   /** address: one of the host's addresses; by default the one monitoring last saw answer. */
   openInBrowser(hostId: string, address?: string): Promise<void>
   openWinbox(hostId: string, address?: string): Promise<void>
+  openVnc(hostId: string, address?: string): Promise<void>
+  vncConfig(): Promise<{ password?: string; username?: string; viewOnly: boolean; title: string }>
+  vncStart(): Promise<string>
+  vncReady(sessionId: string): void
+  vncSend(sessionId: string, data: ArrayBuffer): void
+  vncClose(sessionId: string): void
+  onVncData(cb: (sessionId: string, data: Uint8Array) => void): () => void
+  onVncClosed(cb: (sessionId: string) => void): () => void
+  openRdp(hostId: string, address?: string): Promise<void>
   /** end: session offset just after this chunk, to skip chunks already replayed from scrollback. */
   onData(cb: (sessionId: string, data: string, end: number) => void): () => void
   onClosed(cb: (sessionId: string, reason: string) => void): () => void

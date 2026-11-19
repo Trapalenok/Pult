@@ -52,6 +52,13 @@ export interface Host {
   tint?: Tint
   icon?: HostIcon
   overrides: ConnectionDefaults
+  /** SSH is available unless explicitly disabled for this host. */
+  sshEnabled?: boolean
+  /** Remote desktops use their own credentials, independent from SSH. */
+  remote?: {
+    vnc?: { port?: number; username?: string; viewOnly?: boolean }
+    rdp?: { port?: number; username?: string; domain?: string }
+  }
   privateKeyPath?: string
   /** Automatic LLDP with the effective SNMP community; on unless false. */
   lldpAuto?: boolean
@@ -260,6 +267,7 @@ export interface SessionInfo {
 
 /** Asked of the user before a host key is trusted (first connect) or when it changed. */
 export interface HostKeyPrompt {
+  protocol?: 'ssh' | 'rdp'
   requestId: string
   hostName: string
   address: string
@@ -311,6 +319,7 @@ export interface HostStatus {
 
 /** Secret ids: a password is stored under the host/folder/credential id, a community under `snmp:<id>`. */
 export const snmpSecretId = (id: string) => `snmp:${id}`
+export const remoteSecretId = (protocol: 'vnc' | 'rdp', id: string) => `${protocol}:${id}`
 
 /** What a config file holds, shown before it is imported. */
 export interface ImportPreview {
