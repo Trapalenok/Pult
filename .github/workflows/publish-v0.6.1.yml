@@ -1,0 +1,55 @@
+name: Publish Pult 0.6.1
+
+on:
+  push:
+    branches: [release/v0.6.1]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0c73a022ee56df00b415ce6cb73db7794470d5a1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Check version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($version -ne '0.6.1') { throw "Expected 0.6.1, got $version" }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:remote
+      - run: npm run test:transfer
+      - run: npm run test:lldp
+      - run: npm run test:legacy
+      - run: npm run dist:win -- --publish never
+      - run: npm run dist:legacy -- --publish never
+      - name: Verify release files and checksums
+        shell: pwsh
+        run: |
+          $names = @('Pult-Setup-0.6.1.exe', 'Pult-0.6.1-portable.exe', 'Pult-Legacy-Setup-0.6.1.exe', 'Pult-Legacy-0.6.1-portable.exe')
+          foreach ($name in $names) {
+            if (-not (Test-Path "dist/$name")) { throw "Missing dist/$name" }
+          }
+          $names | ForEach-Object {
+            $hash = (Get-FileHash "dist/$_" -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $_"
+          } | Set-Content -Encoding ascii dist/SHA256SUMS.txt
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.6.1
+          target_commitish: 0c73a022ee56df00b415ce6cb73db7794470d5a1
+          name: Pult v0.6.1
+          body_path: .github/release-notes/v0.6.1.md
+          fail_on_unmatched_files: true
+          files: |
+            dist/Pult-*.exe
+            dist/SHA256SUMS.txt
